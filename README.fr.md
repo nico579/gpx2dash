@@ -5,19 +5,111 @@
 [![CI](https://github.com/nico579/gpx2dash/actions/workflows/ci.yml/badge.svg)](https://github.com/nico579/gpx2dash/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/nico579/gpx2dash)](https://github.com/nico579/gpx2dash/releases/latest)
 
-Le script produit un KML et un tableau HTML autonome avec une ligne par fichier
-GPX et huit colonnes triables : date, lieu de départ de la trace, distance,
-dénivelé D+/D−, durée de la trace, distance de route, durée de route et
-**goudron longé (OSM)**.
+**GPX2DASH transforme un dossier contenant des traces GPX en un fichier KML
+regroupant les parcours avec leur dénivelé recalculé, et en un tableau de bord
+HTML pour comparer les sorties et préparer leur accès.**
 
-Les trajets utilisent **OSRM et OpenStreetMap**, sans clé ni compte de facturation.
-La recherche de villes utilise le géocodeur open source **Photon**.
+## Les deux fichiers générés
+
+### Un KML regroupant les traces
+
+Tous les GPX exploitables du dossier sont réunis dans **un seul fichier KML**,
+ouvrable dans une application cartographique compatible. Chaque fichier GPX
+conserve sa propre trace et sa couleur ; les interruptions d'enregistrement
+restent séparées.
+
+Le nom de chaque trace indique la date ou le nom du fichier, le lieu de départ,
+la distance, le **D+ recalculé** et la durée. Les données étendues du KML
+conservent les valeurs exactes **D+/D−**, le modèle d'altitude utilisé, le
+protocole de calcul et les raisons d'un éventuel repli vers une autre source.
+Le recalcul est effectué avant la simplification du dessin, fixée à 10 m par
+défaut avec `--tolerance`.
+
+### Un tableau de bord HTML des traces
+
+Le tableau contient **une ligne par fichier GPX** et huit colonnes :
+
+| Colonne | Contenu |
+|---|---|
+| Date | Date de la sortie |
+| Lieu de départ de la trace | Commune la plus proche du premier point du GPX |
+| Distance de la trace | Longueur du parcours, en kilomètres |
+| Dénivelé | D+ et D− recalculés, en mètres |
+| Durée de la trace | Temps en mouvement estimé, ou temps écoulé si nécessaire |
+| Distance routière | Distance en voiture depuis l'origine choisie jusqu'au départ du GPX |
+| Durée de route | Durée estimée du même trajet, sans trafic en temps réel |
+| Goudron longé (OSM) | Kilomètres du parcours longeant une voie au revêtement bitumineux renseigné |
+
+Les colonnes permettent le **tri** et des **filtres combinables** : `=`, `>`,
+`<` ou `Entre`. Toutes les conditions actives doivent être satisfaites.
+Par exemple : une trace de 10 à 20 km, avec moins de 600 m de D+ et à moins de
+45 minutes de route. Les titres et les filtres restent visibles pendant le
+défilement.
+
+L'origine routière se choisit par **ville ou coordonnées** à la génération ;
+la ville peut ensuite être changée dans le tableau. Cliquer sur le lien d'une
+ligne affiche **l'itinéraire routier et la trace GPX sur la même carte**.
+Le tableau propose aussi une recherche libre et le téléchargement du GPX original.
+
+La mesure du goudron utilise les points du GPX original et les voies
+OpenStreetMap obtenues par **Overpass**. Par défaut, une portion doit rester
+à **15 m maximum** de l'axe de la voie et présenter un écart de direction de **30°**
+au maximum. Les revêtements confirmés et incertains sont distingués ; la
+colonne accepte les mêmes filtres que les autres.
+
+Le HTML s'ouvre par **double-clic**, sans serveur web. La lecture, le tri et les
+filtres fonctionnent hors connexion. Les trajets utilisent **OSRM** et la
+recherche de villes **Photon**, sans clé API ni compte de facturation.
+Internet sert à récupérer les données manquantes et à afficher le fond de carte.
+
+## Comment le dénivelé est recalculé
+
+Le moteur de calcul **gpx2elev**, fourni avec le projet, applique la même méthode
+à chaque trace pour obtenir le dénivelé positif **D+** et négatif **D−** :
+
+1. **Préparer le parcours original.** Les coordonnées du GPX sont conservées,
+   sans correction automatique de position. Chaque segment est traité
+   séparément et rééchantillonné tous les **5 m** de distance horizontale,
+   avec conservation de son dernier point.
+2. **Obtenir un profil d'altitude complet.** Le moteur retient le premier
+   modèle disponible couvrant **toutes les positions de la trace**, dans
+   cet ordre : **IGN LiDAR HD → Mapterhorn → FABDEM 1.2 → Copernicus GLO-30 →
+   SRTM90**. Un seul modèle est utilisé pour l'ensemble de la trace ; un
+   profil incomplet entraîne le passage au modèle suivant.
+3. **Lisser le profil.** Un filtre gaussien d'écart type **20 m de distance
+   parcourue** atténue les petites fluctuations d'altitude. Le traitement des
+   extrémités prolonge le profil pour limiter les effets de bord.
+4. **Retenir les montées et descentes.** Une hystérésis de **2 m** valide
+   les changements de sens : un retournement montée/descente, ou l'inverse,
+   n'est retenu qu'après une variation d'au moins 2 m depuis l'extrême atteint.
+   Les extrémités de chaque segment restent prises en compte.
+5. **Additionner les variations retenues.** Les hausses donnent le D+ ;
+   les baisses donnent le D−. Les résultats des segments sont additionnés,
+   sans créer de dénivelé entre deux segments discontinus.
+
+Si aucun modèle ne fournit un profil complet, le moteur applique le même
+rééchantillonnage, lissage et seuil aux **altitudes GPX**, lorsqu'elles sont
+complètes. Ce résultat est identifié comme **« GPX filtré (secours) »**.
+Si aucune altitude exploitable n'est disponible, le dénivelé reste **inconnu**.
+
+Le tableau et le KML utilisent les mêmes résultats, affichés au mètre près ;
+les valeurs exactes et les comparaisons avec les altitudes GPX brutes et filtrées
+sont conservées dans le cache et les données étendues du KML. Les fichiers GPX
+sources sont seulement lus. Le protocole complet est décrit dans
+[AGREG_DENIVELE.md](AGREG_DENIVELE.md).
+
+Sans `--from-cache`, le moteur recalcule les statistiques et récupère les
+données d'altitude manquantes. Avec `--from-cache`, il réutilise les statistiques
+valides ou les profils d'altitude déjà en cache, puis les altitudes GPX filtrées ;
+**aucune donnée d'altitude n'est téléchargée**.
+
+## Installer et lancer
 
 Choisir **une seule méthode d'installation**. Le bundle autonome est recommandé
 pour utiliser l'application. L'exécution des sources Python est une alternative
 pour travailler sur le code. **Il ne faut pas lancer les deux commandes.**
 
-## Option 1 : bundle autonome (recommandé)
+### Option 1 : bundle autonome (recommandé)
 
 Les [releases GitHub](https://github.com/nico579/gpx2dash/releases) proposent :
 
@@ -28,10 +120,11 @@ Les [releases GitHub](https://github.com/nico579/gpx2dash/releases) proposent :
 | macOS Apple Silicon | `gpx2dash-macos-arm64.tar.gz` |
 
 Décompresser et conserver **tout le dossier `gpx2dash`**, y compris `_internal`.
-Dans un terminal ouvert dans ce dossier :
+Dans un terminal ouvert dans ce dossier, lancer une première génération
+avec recalcul du dénivelé, routage et mesure du goudron :
 
 ~~~powershell
-.\gpx2dash.exe "C:\chemin\vers\gpx" --from-cache --asphalt --html tableau_bord.html --kml traces.kml --language fr
+.\gpx2dash.exe "C:\chemin\vers\gpx" --asphalt --html tableau_bord.html --kml traces.kml --language fr
 ~~~
 
 Remplacer `C:\chemin\vers\gpx` par le chemin réel de ton dossier GPX, puis
@@ -45,7 +138,10 @@ Les archives sont **construites et testées sur les runners GitHub**, sur chaque
 système, avec les mêmes dépendances verrouillées que les sources.
 Le fichier `SHA256SUMS.txt` de la release permet de vérifier les téléchargements.
 
-## Option 2 : exécution depuis les sources
+La commande récupère les données manquantes et les conserve en cache.
+Pour une régénération sans téléchargement d'altitudes, ajouter `--from-cache`.
+
+### Option 2 : exécution depuis les sources
 
 Choisir cette méthode **à la place du bundle** pour exécuter ou modifier
 le code Python. **Python 3.12** et Git sont nécessaires. Le moteur de dénivelé
@@ -63,7 +159,7 @@ py -3.12 -m venv .venv
 Pour générer le même catalogue qu'avec le bundle, à partir de ton dossier GPX :
 
 ~~~powershell
-.\.venv\Scripts\python.exe -X utf8 gpx2dash.py "C:\chemin\vers\gpx" --from-cache --asphalt --html tableau_bord.html --kml traces.kml --language fr
+.\.venv\Scripts\python.exe -X utf8 gpx2dash.py "C:\chemin\vers\gpx" --asphalt --html tableau_bord.html --kml traces.kml --language fr
 ~~~
 
 Remplacer `C:\chemin\vers\gpx` par le chemin réel de ton dossier GPX.
@@ -75,7 +171,7 @@ Sous Linux ou macOS, remplacer les commandes de l'environnement par :
 ~~~bash
 python3.12 -m venv .venv
 .venv/bin/python -m pip install --require-hashes -r requirements.txt
-.venv/bin/python gpx2dash.py "/chemin/vers/gpx" --from-cache --asphalt --html tableau_bord.html --kml traces.kml --language fr
+.venv/bin/python gpx2dash.py "/chemin/vers/gpx" --asphalt --html tableau_bord.html --kml traces.kml --language fr
 ~~~
 
 Avec les sources, essayer le script **sans appel réseau**, avec l'exemple synthétique fourni :
@@ -281,7 +377,7 @@ de tuiles ; sa disponibilité n'est pas garantie.
 Dans PowerShell, depuis le dossier du bundle :
 
 ~~~powershell
-.\gpx2dash.exe "C:\chemin\vers\gpx" --from-cache --asphalt --html tableau_bord.html --kml traces.kml
+.\gpx2dash.exe "C:\chemin\vers\gpx" --asphalt --html tableau_bord.html --kml traces.kml
 ~~~
 
 Sans dossier indiqué, le script utilise le dossier voisin `../gpx` s'il existe,

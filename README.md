@@ -5,20 +5,107 @@
 [![CI](https://github.com/nico579/gpx2dash/actions/workflows/ci.yml/badge.svg)](https://github.com/nico579/gpx2dash/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/nico579/gpx2dash)](https://github.com/nico579/gpx2dash/releases/latest)
 
-Turn a GPX folder into a **standalone HTML dashboard** and a combined KML.
-One row per track, with eight sortable columns: date, starting place, track
-distance, elevation gain/loss, track duration, driving distance, driving time,
-and **distance alongside asphalt (OSM)**.
+**GPX2DASH turns a folder of GPX tracks into a single KML file containing
+the routes with recalculated elevation gain/loss, and an HTML dashboard
+for comparing outings and planning how to reach them.**
 
-Driving routes use **OSRM / OpenStreetMap**, and town search uses **Photon**.
-No API key or billing account is required. Open the generated HTML by
-double-clicking it: no web server is needed.
+## The two generated files
+
+### A KML containing all tracks
+
+All usable GPX files in the folder are collected into **one KML file**,
+which opens in a compatible mapping application. Each GPX file retains
+its own track and colour; gaps between recording segments stay separate.
+
+Each track name includes its date or filename, starting place, distance,
+**recalculated ascent** and duration. KML extended data stores the exact
+**ascent/descent**, the elevation model, the calculation protocol and reasons
+for any fallback to another source. Statistics are calculated before drawing
+simplification, which defaults to 10 m with `--tolerance`.
+
+### An HTML dashboard of the tracks
+
+The dashboard contains **one row per GPX file** and eight columns:
+
+| Column | Content |
+|---|---|
+| Date | Outing date |
+| Track starting place | Nearest town to the first GPX point |
+| Track distance | Route length in kilometres |
+| Elevation gain/loss | Recalculated ascent and descent in metres |
+| Track duration | Estimated moving time, or elapsed time when necessary |
+| Driving distance | Driving distance from the chosen origin to the GPX start |
+| Driving time | Estimated duration of the same drive, without live traffic |
+| Distance alongside asphalt (OSM) | Track kilometres alongside a road with an explicitly mapped bituminous surface |
+
+Columns support **sorting** and **combined filters**: `=`, `>`, `<` or
+`Between`. A track must satisfy every active condition. For example:
+10–20 km long, less than 600 m ascent, and less than 45 minutes away by car.
+Column titles and filters remain visible while scrolling.
+
+Choose the driving origin by **town or coordinates** when generating the
+files; the town can then be changed in the dashboard. Clicking a row's route
+link displays **the driving route and GPX track on the same map**.
+Free-text search and original GPX downloads are also available.
+
+Asphalt measurement uses the original GPX points and OpenStreetMap roads
+retrieved through **Overpass**. By default, a portion must be within **15 m**
+of the road axis and have a direction difference of at most **30°**.
+Confirmed and uncertain surfaces are distinguished; this column supports
+the same filters as the others.
+
+Open the HTML by **double-clicking**: no web server is required. Reading,
+sorting and filtering work offline. Driving routes use **OSRM** and town search
+uses **Photon**, with no API key or billing account. Internet is used to fetch
+missing data and display the map background.
+
+## How elevation gain/loss is recalculated
+
+The **gpx2elev** calculation engine, included in the project, applies the same
+method to every track to calculate cumulative ascent **D+** and descent **D−**:
+
+1. **Prepare the original route.** GPX coordinates are preserved without
+   automatic position correction. Each segment is processed separately and
+   resampled every **5 m** of horizontal distance, retaining its final point.
+2. **Obtain a complete elevation profile.** The engine selects the first
+   available model covering **every sampled position of the track**, in this
+   order: **IGN LiDAR HD → Mapterhorn → FABDEM 1.2 → Copernicus GLO-30 →
+   SRTM90**. A single model covers the entire track; an incomplete profile
+   causes the next model to be tried.
+3. **Smooth the profile.** A Gaussian filter with a standard deviation of
+   **20 m of distance travelled** reduces small elevation fluctuations.
+   The profile is extended at segment ends to limit edge effects.
+4. **Identify climbs and descents.** A **2 m hysteresis** validates changes
+   of direction: a climb/descent reversal, or the reverse, is accepted only
+   after a change of at least 2 m from the extreme reached. Each segment's
+   endpoints remain included.
+5. **Sum the retained changes.** Increases give ascent; decreases give
+   descent. Segment totals are added without introducing an elevation change
+   across recording gaps.
+
+If no model provides a complete profile, the engine applies the same
+resampling, smoothing and threshold to **GPX elevations**, when complete.
+The result is identified as a **filtered GPX fallback**. If no usable
+elevation data is available, gain/loss remains **unknown**.
+
+The dashboard and KML share these results, displayed to the nearest metre.
+Exact values and comparisons with raw and filtered GPX elevations are stored
+in the cache and KML extended data. Source GPX files are only read.
+The complete protocol is documented in
+[AGREG_DENIVELE.md](AGREG_DENIVELE.md) (in French).
+
+Without `--from-cache`, the engine recalculates statistics and retrieves missing
+elevation data. With `--from-cache`, it reuses valid statistics or cached
+elevation profiles, then filtered GPX elevations; **no elevation data is
+downloaded**.
+
+## Install and run
 
 Choose **one installation method**. The standalone bundle is recommended
 for normal use. Running the Python source is an alternative if you want to
 work with the code. **You do not need to run both commands.**
 
-## Option 1: standalone bundle (recommended)
+### Option 1: standalone bundle (recommended)
 
 Download from [GitHub Releases](https://github.com/nico579/gpx2dash/releases):
 
@@ -29,10 +116,11 @@ Download from [GitHub Releases](https://github.com/nico579/gpx2dash/releases):
 | macOS Apple Silicon | `gpx2dash-macos-arm64.tar.gz` |
 
 Extract and keep the **entire `gpx2dash` folder**, including `_internal`.
-Open a terminal in that folder and run:
+Open a terminal in that folder and run a first generation with
+elevation recalculation, routing and asphalt measurement:
 
 ~~~powershell
-.\gpx2dash.exe "C:\path\to\gpx" --from-cache --asphalt --html dashboard.html --kml tracks.kml --language en
+.\gpx2dash.exe "C:\path\to\gpx" --asphalt --html dashboard.html --kml tracks.kml --language en
 ~~~
 
 Replace `C:\path\to\gpx` with the actual path to your GPX folder, then
@@ -44,7 +132,10 @@ and continue with [usage examples](#usage-examples).
 They are **built and tested on native GitHub runners**, using locked
 dependencies. Release assets include SHA-256 checksums and `SHA256SUMS.txt`.
 
-## Option 2: run from source
+The command fetches missing data and caches it. Add `--from-cache`
+to regenerate without downloading elevation data.
+
+### Option 2: run from source
 
 Choose this method **instead of the bundle** to run or modify the Python
 code. Python **3.12** and Git are required. The elevation engine is included:
@@ -57,7 +148,7 @@ git clone https://github.com/nico579/gpx2dash.git
 cd gpx2dash
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --require-hashes -r requirements.txt
-.\.venv\Scripts\python.exe -X utf8 gpx2dash.py "C:\path\to\gpx" --from-cache --asphalt --html dashboard.html --kml tracks.kml --language en
+.\.venv\Scripts\python.exe -X utf8 gpx2dash.py "C:\path\to\gpx" --asphalt --html dashboard.html --kml tracks.kml --language en
 ~~~
 
 Linux/macOS:
@@ -67,13 +158,13 @@ git clone https://github.com/nico579/gpx2dash.git
 cd gpx2dash
 python3.12 -m venv .venv
 .venv/bin/python -m pip install --require-hashes -r requirements.txt
-.venv/bin/python gpx2dash.py "/path/to/gpx" --from-cache --asphalt --html dashboard.html --kml tracks.kml --language en
+.venv/bin/python gpx2dash.py "/path/to/gpx" --asphalt --html dashboard.html --kml tracks.kml --language en
 ~~~
 
 Replace the example path with your GPX folder. This source command produces
 the same dashboard and KML as the bundle command. With no positional
-argument, the program
-uses the sibling `gpx` folder if present, otherwise the current directory.
+argument, the program uses the sibling `gpx` folder if present, otherwise
+the current directory.
 Both `.gpx` and `.GPX` are accepted. Default output names are timestamped.
 
 With the sources, try a **fully offline demonstration** using the synthetic example:
