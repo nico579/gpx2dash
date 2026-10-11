@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<title>Traces GPX · Tableau de bord</title>
+<style>@@LEAFLETSTYLE@@</style>
+<style>
+:root { color-scheme: light; --ink: #20342a; --muted: #68766d; --green: #235d42; --line: #dde4db; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #f4f5ef; color: var(--ink); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1500px; margin: auto; padding: 44px 36px 28px; }
+.eyebrow { color: var(--green); font-size: 12px; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
+header { display: flex; justify-content: space-between; align-items: end; gap: 24px; margin: 12px 0 30px; }
+h1 { font-size: clamp(28px, 3vw, 42px); line-height: 1.15; letter-spacing: -.04em; margin: 0 0 12px; font-weight: 700; }
+.subtitle { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.6; }
+.origin { max-width: 430px; border: 1px solid #cbd8c7; background: #eaf0e5; padding: 11px 15px; border-radius: 8px; font-size: 13px; }
+.origin strong { color: var(--green); }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 0 0 28px; }
+.stat { background: #fff; border: 1px solid var(--line); padding: 20px 22px; border-radius: 10px; }
+.stat:first-child { background: var(--green); color: #fff; border-color: var(--green); }
+.stat-label { font-size: 13px; color: var(--muted); }
+.stat:first-child .stat-label { color: #d4e3d5; }
+.stat-value { display: block; font-size: 29px; font-weight: 650; letter-spacing: -.03em; margin-top: 7px; }
+.catalogue { background: #fff; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.toolbar { display: flex; justify-content: space-between; align-items: center; padding: 22px; gap: 20px; border-bottom: 1px solid var(--line); }
+h2 { font-size: 17px; margin: 0; font-weight: 650; }
+#visible-count { font-size: 12px; color: var(--muted); font-weight: 400; margin-left: 10px; }
+.search { display: flex; align-items: center; gap: 10px; border: 1px solid #ccd6cb; border-radius: 6px; padding: 9px 12px; width: 340px; }
+.search:focus-within { outline: 2px solid var(--green); outline-offset: 2px; }
+.search svg { color: var(--muted); flex-shrink: 0; }
+.search input { width: 100%; border: 0; outline: 0; font: inherit; font-size: 13px; color: var(--ink); background: transparent; }
+.filter-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 22px; border-bottom: 1px solid var(--line); background: #fafbf7; }
+.filter-help { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.65; }
+.filter-help strong { color: var(--ink); font-weight: 600; }
+#filters-status { display: block; color: var(--green); }
+#reset-filters { flex-shrink: 0; border: 1px solid #bcccbc; border-radius: 6px; padding: 8px 12px; color: var(--green); background: #fff; font: inherit; font-size: 12px; cursor: pointer; }
+#reset-filters:disabled { opacity: .5; cursor: default; }
+#reset-filters:focus-visible, .column-filter :focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+.table-scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; min-width: 1280px; font-size: 14px; }
+caption { text-align: left; padding: 12px 22px; color: var(--muted); font-size: 12px; background: #fafbf7; }
+th { text-align: left; background: #f3f6f0; border-bottom: 1px solid var(--line); padding: 0; font-size: 12px; vertical-align: middle; }
+th button { color: #526453; font: inherit; font-weight: 650; width: 100%; display: flex; align-items: center; gap: 7px; justify-content: space-between; background: none; border: 0; padding: 17px 18px; cursor: pointer; text-align: left; min-height: 64px; }
+th button:hover { background: #e9f0e4; }
+th button:focus-visible, a:focus-visible { outline: 2px solid var(--green); outline-offset: -3px; }
+th[aria-sort="ascending"] .arrow::before { content: "↑"; }
+th[aria-sort="descending"] .arrow::before { content: "↓"; }
+.arrow::before { content: "↕"; color: var(--green); }
+td { padding: 20px 18px; border-bottom: 1px solid #e8ece4; vertical-align: top; line-height: 1.5; }
+.column-filter { padding: 10px 14px 14px; background: #f3f6f0; border-bottom: 1px solid var(--line); }
+.column-filter select, .column-filter input { display: block; width: 100%; min-width: 105px; border: 1px solid #bcccbc; border-radius: 5px; padding: 7px 8px; font: inherit; font-size: 12px; color: var(--ink); background: #fff; }
+.column-filter input { margin-top: 7px; }
+.column-filter input[type="date"] { min-width: 140px; }
+.column-filter input:disabled { background: #f8faf5; color: var(--muted); opacity: .65; }
+.column-filter [aria-invalid="true"] { border-color: #a44832; }
+.filter-error { display: block; margin-top: 6px; color: #a44832; font-size: 11px; line-height: 1.4; }
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr:hover { background: #fafbf7; }
+td.trace { width: 22%; min-width: 210px; overflow-wrap: anywhere; }
+td.place { width: 20%; min-width: 190px; }
+td.numeric { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 550; }
+.date { font-weight: 650; display: block; }
+.trace-name { font-size: 12px; color: var(--muted); display: block; margin-top: 5px; }
+.trace-name a { color: var(--muted); text-decoration: none; }
+.trace-name a:hover { color: var(--green); text-decoration: underline; }
+.detail { display: block; color: var(--muted); font-weight: 400; font-size: 11px; margin-top: 5px; }
+.route-link { display: block; width: fit-content; color: var(--green); font-size: 12px; margin-top: 8px; text-underline-offset: 3px; }
+td.goudron .detail { white-space: normal; }
+.surface-note { grid-column: 1 / -1; }
+.error { color: #a44832; font-weight: 650; }
+.empty { text-align: center; color: var(--muted); padding: 36px; }
+[hidden] { display: none !important; }
+.notes { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 18px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.notes p { margin: 0; padding: 12px 0; }
+.notes strong { color: #455a49; }
+footer { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 15px; display: flex; justify-content: space-between; gap: 16px; color: var(--muted); font-size: 11px; }
+footer a { color: inherit; }
+@media (max-width: 850px) {
+ main { padding: 26px 16px; }
+ header { display: block; }
+ .origin { display: inline-block; margin-top: 18px; white-space: normal; }
+ .stats { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+ .stat { padding: 17px; }
+ .stat-value { font-size: 25px; }
+ .toolbar { align-items: start; flex-direction: column; gap: 14px; padding: 18px; }
+ .search { width: 100%; }
+ .filter-toolbar { align-items: start; flex-direction: column; padding: 12px 18px; gap: 10px; }
+ .notes { grid-template-columns: 1fr; gap: 0; }
+ footer { flex-direction: column; gap: 6px; }
+}
+@media print {
+ body { background: #fff; }
+ main { padding: 0; max-width: none; }
+ .search, .filter-toolbar, #column-filters { display: none; }
+ .table-scroll { overflow: visible; }
+ table { min-width: 0; font-size: 9px; }
+ td, th button { padding: 8px; }
+ .detail, .trace-name, .route-link { font-size: 8px; }
+ td.trace, td.place { min-width: 0; }
+ .stats { gap: 8px; }
+ .stat { padding: 10px; }
+ .stat:first-child { background: #fff; color: var(--ink); }
+ .stat:first-child .stat-label { color: var(--muted); }
+ tr { break-inside: avoid; }
+}
+
+.route-settings { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 20px 22px; margin-bottom: 22px; }
+.route-settings h2 { margin-bottom: 15px; }
+.route-controls { display: grid; grid-template-columns: minmax(230px, 1fr) minmax(300px, 1.4fr); gap: 18px; }
+.route-controls label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 7px; }
+.field-row { display: flex; gap: 8px; align-items: center; }
+.field-row input, .field-row select { min-width: 0; flex: 1; width: 100%; border: 1px solid #bcccbc; border-radius: 6px; background: #fff; color: var(--ink); padding: 10px; font: inherit; font-size: 13px; }
+.route-settings button { border: 1px solid var(--green); border-radius: 6px; padding: 10px 14px; background: var(--green); color: #fff; font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.route-settings button.secondary { background: #fff; color: var(--green); }
+.route-settings button:disabled { cursor: default; opacity: .5; }
+.route-settings :focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+.route-status { display: flex; align-items: center; gap: 12px; margin-top: 13px; }
+#route-status { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+@media (max-width: 850px) { .route-controls { grid-template-columns: 1fr; } .route-settings { padding: 18px; } }
+@media (max-width: 450px) { .city-choice .field-row { flex-wrap: wrap; } .city-choice select { flex-basis: 100%; } }
+@media print { .route-settings { display: none; } }
+
+#map-dialog { width: min(1200px, calc(100vw - 32px)); height: min(840px, calc(100dvh - 40px)); max-width: none; max-height: none; margin: auto; padding: 0; border: 1px solid #cbd8c7; border-radius: 12px; background: #fff; color: var(--ink); box-shadow: 0 24px 90px #18271e66; }
+#map-dialog[open] { display: flex; flex-direction: column; }
+#map-dialog::backdrop { background: #15271db3; }
+.map-head { display: flex; align-items: start; justify-content: space-between; gap: 18px; padding: 18px 22px 14px; }
+.map-head h2 { font-size: 17px; overflow-wrap: anywhere; margin-bottom: 6px; }
+#map-origin { margin: 0; font-size: 12px; color: var(--muted); }
+.map-head button, .map-tools button { background: #fff; border: 1px solid #bcccbc; border-radius: 6px; padding: 8px 12px; color: var(--green); font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
+.map-head button:focus-visible, .map-tools button:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+.map-tools { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 0 22px 14px; }
+.map-legend, .map-zoom { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; font-size: 12px; }
+.map-legend span { display: inline-flex; align-items: center; gap: 7px; }
+.map-legend span::before { content: ""; display: inline-block; height: 4px; width: 24px; border-radius: 2px; }
+.map-legend .road::before { background: #2467ae; }
+.map-legend .gpx::before { background: #c54f36; }
+#trace-map { flex: 1; min-height: 180px; width: 100%; background: #eef1e9; }
+#map-status { margin: 0; padding: 12px 22px 8px; font-size: 12px; line-height: 1.5; }
+#map-tiles-note { margin: 0; padding: 0 22px 8px; color: #a44832; font-size: 12px; }
+.map-links { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px 18px; padding: 0 22px 14px; font-size: 12px; }
+.map-links a { color: var(--green); text-underline-offset: 3px; }
+@media (max-width: 600px) {
+ #map-dialog { width: calc(100vw - 16px); height: calc(100dvh - 20px); border-radius: 8px; }
+ .map-head { padding: 14px; gap: 12px; }
+ .map-head h2 { font-size: 14px; }
+ .map-tools { padding: 0 14px 10px; }
+ #map-status { padding: 10px 14px 8px; }
+ #map-tiles-note { padding: 0 14px 8px; }
+ .map-links { padding: 0 14px 12px; }
+ .leaflet-control-attribution { font-size: 9px; }
+}
+@media print { #map-dialog { display: none !important; } }
+</style>
+</head>
+<body>
+<main>
+<div class="eyebrow">GPX2DASH · Mes itinéraires</div>
+<header>
+ <div>
+  <h1>Tableau de bord des traces</h1>
+  <p class="subtitle">Une trace par ligne, pour comparer les sorties et préparer le trajet.</p>
+ </div>
+ <div class="origin">Départ des trajets · <strong data-origine>@@ORIGINE@@</strong></div>
+</header>
+<section class="stats" aria-label="Bilan des traces">
+ <div class="stat"><span class="stat-label">Traces du catalogue</span><strong class="stat-value">@@NOMBRE@@</strong></div>
+ <div class="stat"><span class="stat-label">Distance cumulée des traces</span><strong class="stat-value">@@DISTANCE@@</strong></div>
+ <div class="stat"><span class="stat-label">Dénivelé positif connu</span><strong class="stat-value">@@DENIVELE@@</strong></div>
+ <div class="stat"><span class="stat-label">Trajets routiers OSRM renseignés</span><strong class="stat-value" id="routes-count">@@ROUTES@@</strong></div>
+</section>
+<section class="route-settings" id="route-settings" aria-labelledby="routes-title">
+ <h2 id="routes-title">Choisir la ville de départ des trajets</h2>
+ <div class="route-controls">
+  <form id="city-form">
+   <label for="route-city">Ville à rechercher</label>
+   <div class="field-row">
+    <input id="route-city" type="search" value="@@VILLE@@" placeholder="Ex. Toulon, France" required minlength="2" maxlength="160" autocomplete="off">
+    <button type="submit" id="city-search" class="secondary">Rechercher</button>
+   </div>
+  </form>
+  <div class="city-choice">
+   <label for="city-results">Ville retenue</label>
+   <div class="field-row">
+    <select id="city-results" aria-label="Choisir la ville trouvée"></select>
+    <button type="button" id="calculate-routes">Calculer les trajets</button>
+   </div>
+  </div>
+ </div>
+ <div class="route-status">
+  <p id="route-status" role="status" aria-live="polite">Recherchez une ville, sélectionnez-la, puis calculez les trajets. Connexion Internet nécessaire.</p>
+  <button type="button" id="cancel-routes" class="secondary" hidden>Annuler</button>
+ </div>
+</section>
+<section class="catalogue" aria-labelledby="catalogue-title">
+ <div class="toolbar">
+  <h2 id="catalogue-title">Toutes les traces <span id="visible-count" aria-live="polite">@@NOMBRE@@ trace(s)</span></h2>
+  <label class="search">
+   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 5 5" stroke="currentColor" stroke-width="1.8"/></svg>
+   <input id="search" type="search" aria-label="Rechercher une trace, un lieu ou une date" placeholder="Rechercher une trace, un lieu, une date…">
+  </label>
+ </div>
+ <div class="filter-toolbar">
+  <p class="filter-help" id="filter-help"><strong>Toutes les conditions se combinent (ET).</strong> « Entre » inclut les bornes.<br>
+   Distances : km · D+ : m · Durées : minutes · Lieux : ordre alphabétique.
+   <span id="filters-status" role="status" aria-live="polite">Aucun filtre de colonne.</span>
+  </p>
+  <button type="button" id="reset-filters" disabled>Effacer les filtres</button>
+ </div>
+ <div class="table-scroll" tabindex="0" role="region" aria-label="Tableau des traces, défilement horizontal sur petit écran">
+  <table id="traces">
+   <caption>Cliquez sur un en-tête pour trier. Les valeurs non renseignées sont indiquées par un tiret.</caption>
+   <thead><tr>
+    <th scope="col" aria-sort="descending"><button type="button" data-column="0">Date / trace <span class="arrow" aria-hidden="true"></span></button></th>
+    <th scope="col" aria-sort="none"><button type="button" data-column="1">Lieu de départ <span class="arrow" aria-hidden="true"></span></button></th>
+    <th scope="col" aria-sort="none"><button type="button" data-column="2">Distance de la trace <span class="arrow" aria-hidden="true"></span></button></th>
+    <th scope="col" aria-sort="none"><button type="button" data-column="3">Dénivelé D+ / D− <span class="arrow" aria-hidden="true"></span></button></th>
+    <th scope="col" aria-sort="none"><button type="button" data-column="4">Durée de la trace <span class="arrow" aria-hidden="true"></span></button></th>
+    <th scope="col" aria-sort="none"><button type="button" data-column="5">Distance de route <span class="arrow" aria-hidden="true"></span></button></th>
+    <th scope="col" aria-sort="none"><button type="button" data-column="6">Durée de route <span class="arrow" aria-hidden="true"></span></button></th>
+    <th scope="col" aria-sort="none"><button type="button" data-column="7">Goudron longé (OSM) <span class="arrow" aria-hidden="true"></span></button></th>
+   </tr><tr id="column-filters"></tr></thead>
+   <tbody>
+@@LIGNES@@
+   </tbody>
+  </table>
+ </div>
+ <p id="no-results" class="empty" hidden>Aucune trace à afficher.</p>
+</section>
+<div class="notes">
+ <p><strong>Lecture des traces.</strong> La durée estime le temps en mouvement, avec repli sur le temps écoulé. Le dénivelé est une estimation du moteur gpx2elev. Le lieu correspond à la commune la plus proche ; le lien OpenStreetMap utilise les coordonnées du départ.</p>
+ <p><strong>Trajets depuis <span data-origine>@@ORIGINE@@</span>.</strong> <span id="route-note">@@NOTE@@</span></p>
+ <p class="surface-note"><strong>Goudron longé.</strong> Estimation sur les points du GPX d’origine, à moins de @@MARGEGOUDRON@@ m de l’axe d’une voie bitumineuse OSM et avec un écart de direction de @@ANGLEGOUDRON@@° maximum ; les croisements perpendiculaires sont exclus.
+ Échantillonnage de 5 m. « ≥ » indique le minimum repéré lorsqu’un revêtement reste incertain ; un tiret indique un calcul absent ou aucune portion confirmée malgré des revêtements incertains.
+ Les filtres portent sur la distance repérée. <a href="https://wiki.openstreetmap.org/wiki/Key:surface" target="_blank" rel="noopener noreferrer">Revêtements OpenStreetMap</a>.</p>
+</div>
+<footer>
+ <span>Généré le @@GENERATION@@ · GPX2DASH</span>
+ <span>Routage : <a href="https://project-osrm.org/" target="_blank" rel="noopener noreferrer">OSRM</a> · Villes : <a href="https://photon.komoot.io/" target="_blank" rel="noopener noreferrer">Photon</a> ·
+ © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">contributeurs OpenStreetMap</a> ·
+ <a href="https://www.openstreetmap.org/fixthemap" target="_blank" rel="noopener noreferrer">Corriger la carte</a></span>
+</footer>
+<dialog id="map-dialog" aria-labelledby="map-title" aria-describedby="map-origin">
+ <div class="map-head">
+  <div><h2 id="map-title">Itinéraire et trace GPX</h2><p id="map-origin"></p></div>
+  <button type="button" id="map-close" autofocus>Fermer</button>
+ </div>
+ <div class="map-tools">
+  <div class="map-legend" aria-label="Légende de la carte"><span class="road">Trajet routier</span><span class="gpx">Trace GPX</span></div>
+  <div class="map-zoom">
+   <button type="button" id="map-overview">Vue d’ensemble</button>
+   <button type="button" id="map-trace">Zoom sur la trace</button>
+  </div>
+ </div>
+ <div id="trace-map" role="region" aria-label="Carte interactive du trajet routier et de la trace GPX"></div>
+ <p id="map-status" role="status" aria-live="polite"></p>
+ <p id="map-tiles-note" hidden>Fond de carte indisponible. Les tracés restent visibles ; vérifiez votre connexion Internet.</p>
+ <div class="map-links">
+  <a id="map-download" download>Télécharger le GPX original</a>
+  <a id="map-osm" target="_blank" rel="noopener noreferrer">Ouvrir le trajet dans OpenStreetMap ↗</a>
+ </div>
+</dialog>
+</main>
+<script id="dashboard-data" type="application/json">@@DONNEES@@</script>
+<script>
+@@SCRIPT@@
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="GPX2DASH demo" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata><name>Exemple synthétique</name><desc>Coordonnées et altitudes fictives pour tester le script.</desc></metadata>
+  <trk><name>Exemple synthétique</name><trkseg>
+    <trkpt lat="43.32930" lon="6.04580"><ele>330</ele><time>2026-01-01T08:00:00Z</time></trkpt>
+    <trkpt lat="43.32980" lon="6.04580"><ele>336</ele><time>2026-01-01T08:02:00Z</time></trkpt>
+    <trkpt lat="43.32980" lon="6.04640"><ele>340</ele><time>2026-01-01T08:04:00Z</time></trkpt>
+    <trkpt lat="43.32930" lon="6.04640"><ele>334</ele><time>2026-01-01T08:06:00Z</time></trkpt>
+    <trkpt lat="43.32930" lon="6.04580"><ele>330</ele><time>2026-01-01T08:08:00Z</time></trkpt>
+  </trkseg></trk>
+</gpx>

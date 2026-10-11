@@ -1,0 +1,42 @@
+# Données personnelles et résultats générés
+*.gpx
+*.GPX
+!examples/demo.gpx
+*.kml
+*.KML
+*.kmz
+*.html
+!tableau_bord_template.html
+.cache_gpx/
+.backup_agreg/
+gpx/
+output/
+
+# Environnements Python et caches
+.venv*/
+venv/
+__pycache__/
+*.py[cod]
+.ruff_cache/
+.pytest_cache/
+build/
+dist/
+*.egg-info/
+
+# Résultats des contrôles de développement
+.qa/*.png
+.qa/*.jpg
+.qa/*.jpeg
+.qa/*.json
+.qa/clone-validation/
+.qa/.venv*/
+.qa/*.log
+
+# Configuration locale
+.env
+.env.*
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
