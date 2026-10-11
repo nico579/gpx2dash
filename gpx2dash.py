@@ -1,6 +1,9 @@
 import os
 import re
 import argparse
+import multiprocessing
+import sys
+from version import VERSION
 import zlib
 import colorsys
 import gpxpy
@@ -160,7 +163,8 @@ def fusionner_gpx_vers_kml_parallele(dossier_entree, fichier_sortie, tolerance_m
                                     origine_route=DEPART_GAREOULT, libelle_origine="Mairie de Garéoult",
                                     dossier_cache=None, statistiques_cache=False, serveur_osrm=SERVEUR_OSRM,
                                     goudron_en_ligne=False, marge_goudron=MARGE_GOUDRON,
-                                    angle_goudron=ANGLE_GOUDRON, serveur_overpass=SERVEUR_OVERPASS):
+                                    angle_goudron=ANGLE_GOUDRON, serveur_overpass=SERVEUR_OVERPASS,
+                                    langue=None):
     """Produit le KML et son tableau HTML, à partir des mêmes statistiques GPX."""
     # Import local et pas en tête de fichier : sous Windows chaque worker du
     # ProcessPoolExecutor ré-importe le module (spawn), or seul le processus
@@ -281,7 +285,7 @@ def fusionner_gpx_vers_kml_parallele(dossier_entree, fichier_sortie, tolerance_m
     try:
         generer_tableau_bord(resultats, fichier_html, libelle_origine=libelle_origine,
                              origine_route=origine_route, serveur_osrm=serveur_osrm,
-                             marge_goudron=marge_goudron, angle_goudron=angle_goudron)
+                             marge_goudron=marge_goudron, angle_goudron=angle_goudron, langue=langue)
         print(f"Tableau de bord HTML : {fichier_html} ({len(resultats)} traces)")
     except OSError as e:
         print(f"Erreur HTML : {e}")
@@ -290,68 +294,85 @@ def fusionner_gpx_vers_kml_parallele(dossier_entree, fichier_sortie, tolerance_m
         print(f"Trajets ({nombre}) : {erreur}")
     return resultats
 
-# --- Paramètres d'exécution ---
 def main():
-    parser = argparse.ArgumentParser(description="Regroupe les GPX en KML et construit un tableau HTML.")
-    dossier_voisin = Path(__file__).resolve().parent.parent / "gpx"
-    parser.add_argument("dossier", nargs="?", default=str(dossier_voisin) if dossier_voisin.is_dir() else ".",
-                        help="Dossier contenant les GPX (défaut : dossier voisin gpx, sinon dossier courant).")
-    parser.add_argument("--cache", default=str(Path(__file__).resolve().parent / DOSSIER_CACHE),
-                        help="Dossier de travail pour les caches.")
-    parser.add_argument("--depuis-cache", action="store_true",
-                        help="Réutilise les statistiques vérifiées du dossier GPX ; aucun téléchargement d'altitudes.")
-    parser.add_argument("--kml", help="Chemin du KML de sortie.")
-    parser.add_argument("--html", help="Chemin du tableau HTML de sortie.")
-    parser.add_argument("--sans-routage", "--sans-maps", dest="sans_routage", action="store_true",
-                        help="Réutilise seulement le cache routier, sans appel OSRM par Python.")
-    parser.add_argument("--serveur-osrm", default=SERVEUR_OSRM, help="URL du serveur OSRM voiture.")
-    parser.add_argument("--goudron", action="store_true",
-                        help="Télécharge les voies OSM proches pour calculer le goudron longé ; sinon cache seulement.")
-    parser.add_argument("--marge-goudron", type=float, default=MARGE_GOUDRON, metavar="METRES",
-                        help="Distance maximale à l'axe d'une voie OSM (1 à 50 m, défaut : 15 m).")
-    parser.add_argument("--angle-goudron", type=float, default=ANGLE_GOUDRON, metavar="DEGRES",
-                        help="Écart de direction maximal, dans les deux sens (1 à 60°, défaut : 30°).")
-    parser.add_argument("--serveur-overpass", default=SERVEUR_OVERPASS, help="URL de l'API Overpass pour les revêtements.")
-    parser.add_argument("--ville-depart", help="Ville recherchée via Photon pour le départ initial des trajets.")
-    parser.add_argument("--origine", nargs=2, type=float, metavar=("LAT", "LON"),
-                        default=DEPART_GAREOULT, help="Départ des trajets (défaut : mairie de Garéoult).")
-    parser.add_argument("--nom-origine", default="Mairie de Garéoult", help="Libellé du départ des trajets.")
-    parser.add_argument("--tolerance", type=float, default=10, help="Simplification KML, en mètres (défaut : 10).")
-    parser.add_argument("--epaisseur", type=float, default=5, help="Épaisseur des lignes KML (défaut : 5).")
+    parser = argparse.ArgumentParser(description="Combine GPX tracks into a KML and a standalone bilingual HTML dashboard.")
+    base = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
+    sibling = base.parent / "gpx"
+    parser.add_argument("folder", nargs="?", default=str(sibling) if sibling.is_dir() else ".",
+                        help="GPX folder (default: sibling gpx folder, otherwise current directory).")
+    parser.add_argument("--version", action="version", version=f"gpx2dash {VERSION}")
+    parser.add_argument("--cache", default=str((Path.cwd() if getattr(sys, "frozen", False) else base) / DOSSIER_CACHE),
+                        help="Working cache folder.")
+    parser.add_argument("--from-cache", action="store_true",
+                        help="Reuse verified statistics; use local elevation data or filtered GPX if absent. No elevation downloads.")
+    parser.add_argument("--kml", help="Output KML file.")
+    parser.add_argument("--html", help="Output HTML dashboard file.")
+    parser.add_argument("--no-routing", action="store_true", help="Use the routing cache only; no OSRM requests from Python.")
+    parser.add_argument("--osrm-server", default=SERVEUR_OSRM, help="OSRM driving server URL.")
+    parser.add_argument("--asphalt", action="store_true", help="Download nearby OSM roads to measure asphalt alongside tracks; otherwise use cache only.")
+    parser.add_argument("--asphalt-tolerance", type=float, default=MARGE_GOUDRON, metavar="METRES",
+                        help="Maximum distance to the OSM road axis (1-50 m, default: 15).")
+    parser.add_argument("--asphalt-angle", type=float, default=ANGLE_GOUDRON, metavar="DEGREES",
+                        help="Maximum direction difference, either direction (1-60 degrees, default: 30).")
+    parser.add_argument("--overpass-server", default=SERVEUR_OVERPASS, help="Overpass API URL for road surfaces.")
+    parser.add_argument("--origin-city", help="Find the initial driving origin with Photon.")
+    parser.add_argument("--origin", nargs=2, type=float, metavar=("LAT", "LON"), default=DEPART_GAREOULT,
+                        help="Driving origin (default: Gareoult town hall).")
+    parser.add_argument("--origin-name", default="Mairie de Garéoult", help="Driving origin label.")
+    parser.add_argument("--tolerance", type=float, default=10, help="KML/map simplification in metres (default: 10).")
+    parser.add_argument("--line-width", type=float, default=5, help="KML line width (default: 5).")
+    parser.add_argument("--language", choices=("en", "fr"), help="Initial dashboard language (default: browser language).")
+    # Hidden aliases keep existing commands working, without duplicating the English help.
+    for old, dest, kw in [
+        ("--depuis-cache", "from_cache", {"action": "store_true"}),
+        ("--sans-routage", "no_routing", {"action": "store_true"}),
+        ("--sans-maps", "no_routing", {"action": "store_true"}),
+        ("--serveur-osrm", "osrm_server", {}),
+        ("--goudron", "asphalt", {"action": "store_true"}),
+        ("--marge-goudron", "asphalt_tolerance", {"type": float}),
+        ("--angle-goudron", "asphalt_angle", {"type": float}),
+        ("--serveur-overpass", "overpass_server", {}),
+        ("--ville-depart", "origin_city", {}),
+        ("--origine", "origin", {"nargs": 2, "type": float}),
+        ("--nom-origine", "origin_name", {}),
+        ("--epaisseur", "line_width", {"type": float}),
+    ]:
+        parser.add_argument(old, dest=dest, help=argparse.SUPPRESS, default=argparse.SUPPRESS, **kw)
     args = parser.parse_args()
-    if not Path(args.dossier).is_dir():
-        parser.error("Le dossier GPX n'existe pas.")
+    if not Path(args.folder).is_dir():
+        parser.error("The GPX folder does not exist.")
     try:
-        args.origine = coordonnees(args.origine)
-        args.serveur_osrm = serveur_valide(args.serveur_osrm)
-        args.serveur_overpass = serveur_valide(args.serveur_overpass)
-        parametres_valides(args.marge_goudron, args.angle_goudron)
-        if args.ville_depart:
-            villes = chercher_villes(args.ville_depart)
-            if not villes:
-                parser.error("Aucune ville trouvée. Précisez le département ou le pays.")
-            args.origine = villes[0]["position"]
-            args.nom_origine = villes[0]["libelle"]
-            print("Ville de départ : " + args.nom_origine)
+        args.origin = coordonnees(args.origin)
+        args.osrm_server = serveur_valide(args.osrm_server)
+        args.overpass_server = serveur_valide(args.overpass_server)
+        parametres_valides(args.asphalt_tolerance, args.asphalt_angle)
+        if args.origin_city:
+            cities = chercher_villes(args.origin_city)
+            if not cities:
+                parser.error("No city found. Specify the region or country.")
+            args.origin = cities[0]["position"]
+            args.origin_name = cities[0]["libelle"]
+            print("Driving origin: " + args.origin_name)
     except ValueError as exc:
         parser.error(str(exc))
-    if not (args.tolerance > 0 and args.epaisseur > 0):
-        parser.error("La tolérance et l'épaisseur doivent être positives.")
-    horodatage = datetime.now().strftime("%Y%m%d_%H%M%S")
-    fichier_kml = args.kml or f"traces_regroupees_{horodatage}.kml"
-    fichier_html = args.html or f"tableau_bord_{horodatage}.html"
-    if Path(fichier_kml).resolve() == Path(fichier_html).resolve():
-        parser.error("Les sorties KML et HTML doivent être des fichiers distincts.")
-    Path(fichier_kml).resolve().parent.mkdir(parents=True, exist_ok=True)
+    if not (0 < args.tolerance < float("inf") and 0 < args.line_width < float("inf")):
+        parser.error("Tolerance and line width must be positive and finite.")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    kml = args.kml or f"tracks_{timestamp}.kml"
+    html = args.html or f"dashboard_{timestamp}.html"
+    if Path(kml).resolve() == Path(html).resolve():
+        parser.error("KML and HTML outputs must be different files.")
+    Path(kml).resolve().parent.mkdir(parents=True, exist_ok=True)
     fusionner_gpx_vers_kml_parallele(
-        args.dossier, fichier_kml, tolerance_m=args.tolerance, epaisseur=args.epaisseur,
-        fichier_html=fichier_html, routes_en_ligne=not args.sans_routage,
-        origine_route=tuple(args.origine), libelle_origine=args.nom_origine,
-        dossier_cache=args.cache, statistiques_cache=args.depuis_cache, serveur_osrm=args.serveur_osrm,
-        goudron_en_ligne=args.goudron, marge_goudron=args.marge_goudron,
-        angle_goudron=args.angle_goudron, serveur_overpass=args.serveur_overpass,
+        args.folder, kml, tolerance_m=args.tolerance, epaisseur=args.line_width,
+        fichier_html=html, routes_en_ligne=not args.no_routing,
+        origine_route=tuple(args.origin), libelle_origine=args.origin_name,
+        dossier_cache=args.cache, statistiques_cache=args.from_cache, serveur_osrm=args.osrm_server,
+        goudron_en_ligne=args.asphalt, marge_goudron=args.asphalt_tolerance,
+        angle_goudron=args.asphalt_angle, serveur_overpass=args.overpass_server, langue=args.language,
     )
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     main()

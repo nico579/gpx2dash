@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<title>Traces GPX · Tableau de bord</title>
+<title data-i18n="Traces GPX · Tableau de bord">Traces GPX · Tableau de bord</title>
 <style>@@LEAFLETSTYLE@@</style>
 <style>
 :root { color-scheme: light; --ink: #20342a; --muted: #68766d; --green: #235d42; --line: #dde4db; }
@@ -38,7 +38,11 @@ h2 { font-size: 17px; margin: 0; font-weight: 650; }
 #reset-filters { flex-shrink: 0; border: 1px solid #bcccbc; border-radius: 6px; padding: 8px 12px; color: var(--green); background: #fff; font: inherit; font-size: 12px; cursor: pointer; }
 #reset-filters:disabled { opacity: .5; cursor: default; }
 #reset-filters:focus-visible, .column-filter :focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
-.table-scroll { overflow-x: auto; }
+.table-scroll { overflow: auto; max-height: 72vh; max-height: 72dvh; scrollbar-gutter: stable; overscroll-behavior: contain; }
+thead { position: sticky; top: 0; z-index: 3; background: #f3f6f0; box-shadow: 0 1px 0 var(--line); }
+.language-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.language-control { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+#language { border: 1px solid #bcccbc; border-radius: 6px; padding: 7px; color: var(--green); background: #fff; }
 table { border-collapse: collapse; width: 100%; min-width: 1280px; font-size: 14px; }
 caption { text-align: left; padding: 12px 22px; color: var(--muted); font-size: 12px; background: #fafbf7; }
 th { text-align: left; background: #f3f6f0; border-bottom: 1px solid var(--line); padding: 0; font-size: 12px; vertical-align: middle; }
@@ -94,7 +98,9 @@ footer a { color: inherit; }
  body { background: #fff; }
  main { padding: 0; max-width: none; }
  .search, .filter-toolbar, #column-filters { display: none; }
- .table-scroll { overflow: visible; }
+ .table-scroll { overflow: visible; max-height: none; }
+ thead { position: static; }
+ .language-control { display: none; }
  table { min-width: 0; font-size: 9px; }
  td, th button { padding: 8px; }
  .detail, .trace-name, .route-link { font-size: 8px; }
@@ -156,109 +162,110 @@ footer a { color: inherit; }
 </head>
 <body>
 <main>
-<div class="eyebrow">GPX2DASH · Mes itinéraires</div>
+<div class="language-bar"><div class="eyebrow" data-i18n="GPX2DASH · Mes itinéraires">GPX2DASH · Mes itinéraires</div>
+<label class="language-control"><span data-i18n="Langue">Langue</span><select id="language" aria-label="Language / Langue"><option value="en">EN · English</option><option value="fr">FR · Français</option></select></label></div>
 <header>
  <div>
-  <h1>Tableau de bord des traces</h1>
-  <p class="subtitle">Une trace par ligne, pour comparer les sorties et préparer le trajet.</p>
+  <h1 data-i18n="Tableau de bord des traces">Tableau de bord des traces</h1>
+  <p class="subtitle" data-i18n="Une trace par ligne, pour comparer les sorties et préparer le trajet.">Une trace par ligne, pour comparer les sorties et préparer le trajet.</p>
  </div>
- <div class="origin">Départ des trajets · <strong data-origine>@@ORIGINE@@</strong></div>
+ <div class="origin"><span data-i18n="Départ des trajets">Départ des trajets</span> · <strong data-origine>@@ORIGINE@@</strong></div>
 </header>
-<section class="stats" aria-label="Bilan des traces">
- <div class="stat"><span class="stat-label">Traces du catalogue</span><strong class="stat-value">@@NOMBRE@@</strong></div>
- <div class="stat"><span class="stat-label">Distance cumulée des traces</span><strong class="stat-value">@@DISTANCE@@</strong></div>
- <div class="stat"><span class="stat-label">Dénivelé positif connu</span><strong class="stat-value">@@DENIVELE@@</strong></div>
- <div class="stat"><span class="stat-label">Trajets routiers OSRM renseignés</span><strong class="stat-value" id="routes-count">@@ROUTES@@</strong></div>
+<section class="stats" aria-label="Bilan des traces" data-i18n-aria-label="Bilan des traces">
+ <div class="stat"><span class="stat-label" data-i18n="Traces du catalogue">Traces du catalogue</span><strong class="stat-value">@@NOMBRE@@</strong></div>
+ <div class="stat"><span class="stat-label" data-i18n="Distance cumulée des traces">Distance cumulée des traces</span><strong class="stat-value" data-total-distance>@@DISTANCE@@</strong></div>
+ <div class="stat"><span class="stat-label" data-i18n="Dénivelé positif connu">Dénivelé positif connu</span><strong class="stat-value" data-total-ascent>@@DENIVELE@@</strong></div>
+ <div class="stat"><span class="stat-label" data-i18n="Trajets routiers OSRM renseignés">Trajets routiers OSRM renseignés</span><strong class="stat-value" id="routes-count">@@ROUTES@@</strong></div>
 </section>
 <section class="route-settings" id="route-settings" aria-labelledby="routes-title">
- <h2 id="routes-title">Choisir la ville de départ des trajets</h2>
+ <h2 id="routes-title" data-i18n="Choisir la ville de départ des trajets">Choisir la ville de départ des trajets</h2>
  <div class="route-controls">
   <form id="city-form">
-   <label for="route-city">Ville à rechercher</label>
+   <label for="route-city" data-i18n="Ville à rechercher">Ville à rechercher</label>
    <div class="field-row">
-    <input id="route-city" type="search" value="@@VILLE@@" placeholder="Ex. Toulon, France" required minlength="2" maxlength="160" autocomplete="off">
-    <button type="submit" id="city-search" class="secondary">Rechercher</button>
+    <input id="route-city" type="search" value="@@VILLE@@" placeholder="Ex. Toulon, France" data-i18n-placeholder="Ex. Toulon, France" required minlength="2" maxlength="160" autocomplete="off">
+    <button type="submit" id="city-search" class="secondary" data-i18n="Rechercher">Rechercher</button>
    </div>
   </form>
   <div class="city-choice">
-   <label for="city-results">Ville retenue</label>
+   <label for="city-results" data-i18n="Ville retenue">Ville retenue</label>
    <div class="field-row">
-    <select id="city-results" aria-label="Choisir la ville trouvée"></select>
-    <button type="button" id="calculate-routes">Calculer les trajets</button>
+    <select id="city-results" aria-label="Choisir la ville trouvée" data-i18n-aria-label="Choisir la ville trouvée"></select>
+    <button type="button" id="calculate-routes" data-i18n="Calculer les trajets">Calculer les trajets</button>
    </div>
   </div>
  </div>
  <div class="route-status">
-  <p id="route-status" role="status" aria-live="polite">Recherchez une ville, sélectionnez-la, puis calculez les trajets. Connexion Internet nécessaire.</p>
-  <button type="button" id="cancel-routes" class="secondary" hidden>Annuler</button>
+  <p id="route-status" role="status" aria-live="polite" data-i18n="Recherchez une ville, sélectionnez-la, puis calculez les trajets. Connexion Internet nécessaire.">Recherchez une ville, sélectionnez-la, puis calculez les trajets. Connexion Internet nécessaire.</p>
+  <button type="button" id="cancel-routes" class="secondary" hidden data-i18n="Annuler">Annuler</button>
  </div>
 </section>
 <section class="catalogue" aria-labelledby="catalogue-title">
  <div class="toolbar">
-  <h2 id="catalogue-title">Toutes les traces <span id="visible-count" aria-live="polite">@@NOMBRE@@ trace(s)</span></h2>
+  <h2 id="catalogue-title"><span data-i18n="Toutes les traces">Toutes les traces</span> <span id="visible-count" aria-live="polite">@@NOMBRE@@ trace(s)</span></h2>
   <label class="search">
    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 5 5" stroke="currentColor" stroke-width="1.8"/></svg>
-   <input id="search" type="search" aria-label="Rechercher une trace, un lieu ou une date" placeholder="Rechercher une trace, un lieu, une date…">
+   <input id="search" type="search" aria-label="Rechercher une trace, un lieu ou une date" data-i18n-aria-label="Rechercher une trace, un lieu ou une date" placeholder="Rechercher une trace, un lieu, une date…" data-i18n-placeholder="Rechercher une trace, un lieu, une date…">
   </label>
  </div>
  <div class="filter-toolbar">
-  <p class="filter-help" id="filter-help"><strong>Toutes les conditions se combinent (ET).</strong> « Entre » inclut les bornes.<br>
-   Distances : km · D+ : m · Durées : minutes · Lieux : ordre alphabétique.
+  <p class="filter-help" id="filter-help"><span data-i18n-html="filterHelp"><strong>Toutes les conditions se combinent (ET).</strong> « Entre » inclut les bornes.<br>
+   Distances : km · D+ : m · Durées : minutes · Lieux : ordre alphabétique.</span>
    <span id="filters-status" role="status" aria-live="polite">Aucun filtre de colonne.</span>
   </p>
-  <button type="button" id="reset-filters" disabled>Effacer les filtres</button>
+  <button type="button" id="reset-filters" disabled data-i18n="Effacer les filtres">Effacer les filtres</button>
  </div>
- <div class="table-scroll" tabindex="0" role="region" aria-label="Tableau des traces, défilement horizontal sur petit écran">
+ <div class="table-scroll" tabindex="0" role="region" aria-label="Tableau des traces, défilement horizontal sur petit écran" data-i18n-aria-label="Tableau des traces, défilement horizontal sur petit écran">
   <table id="traces">
-   <caption>Cliquez sur un en-tête pour trier. Les valeurs non renseignées sont indiquées par un tiret.</caption>
+   <caption data-i18n="Cliquez sur un en-tête pour trier. Les valeurs non renseignées sont indiquées par un tiret.">Cliquez sur un en-tête pour trier. Les valeurs non renseignées sont indiquées par un tiret.</caption>
    <thead><tr>
-    <th scope="col" aria-sort="descending"><button type="button" data-column="0">Date / trace <span class="arrow" aria-hidden="true"></span></button></th>
-    <th scope="col" aria-sort="none"><button type="button" data-column="1">Lieu de départ <span class="arrow" aria-hidden="true"></span></button></th>
-    <th scope="col" aria-sort="none"><button type="button" data-column="2">Distance de la trace <span class="arrow" aria-hidden="true"></span></button></th>
-    <th scope="col" aria-sort="none"><button type="button" data-column="3">Dénivelé D+ / D− <span class="arrow" aria-hidden="true"></span></button></th>
-    <th scope="col" aria-sort="none"><button type="button" data-column="4">Durée de la trace <span class="arrow" aria-hidden="true"></span></button></th>
-    <th scope="col" aria-sort="none"><button type="button" data-column="5">Distance de route <span class="arrow" aria-hidden="true"></span></button></th>
-    <th scope="col" aria-sort="none"><button type="button" data-column="6">Durée de route <span class="arrow" aria-hidden="true"></span></button></th>
-    <th scope="col" aria-sort="none"><button type="button" data-column="7">Goudron longé (OSM) <span class="arrow" aria-hidden="true"></span></button></th>
+    <th scope="col" aria-sort="descending"><button type="button" data-column="0"><span data-i18n="Date / trace">Date / trace</span> <span class="arrow" aria-hidden="true"></span></button></th>
+    <th scope="col" aria-sort="none"><button type="button" data-column="1"><span data-i18n="Lieu de départ">Lieu de départ</span> <span class="arrow" aria-hidden="true"></span></button></th>
+    <th scope="col" aria-sort="none"><button type="button" data-column="2"><span data-i18n="Distance de la trace">Distance de la trace</span> <span class="arrow" aria-hidden="true"></span></button></th>
+    <th scope="col" aria-sort="none"><button type="button" data-column="3"><span data-i18n="Dénivelé D+ / D−">Dénivelé D+ / D−</span> <span class="arrow" aria-hidden="true"></span></button></th>
+    <th scope="col" aria-sort="none"><button type="button" data-column="4"><span data-i18n="Durée de la trace">Durée de la trace</span> <span class="arrow" aria-hidden="true"></span></button></th>
+    <th scope="col" aria-sort="none"><button type="button" data-column="5"><span data-i18n="Distance de route">Distance de route</span> <span class="arrow" aria-hidden="true"></span></button></th>
+    <th scope="col" aria-sort="none"><button type="button" data-column="6"><span data-i18n="Durée de route">Durée de route</span> <span class="arrow" aria-hidden="true"></span></button></th>
+    <th scope="col" aria-sort="none"><button type="button" data-column="7"><span data-i18n="Goudron longé (OSM)">Goudron longé (OSM)</span> <span class="arrow" aria-hidden="true"></span></button></th>
    </tr><tr id="column-filters"></tr></thead>
    <tbody>
 @@LIGNES@@
    </tbody>
   </table>
  </div>
- <p id="no-results" class="empty" hidden>Aucune trace à afficher.</p>
+ <p id="no-results" class="empty" hidden data-i18n="Aucune trace à afficher.">Aucune trace à afficher.</p>
 </section>
 <div class="notes">
- <p><strong>Lecture des traces.</strong> La durée estime le temps en mouvement, avec repli sur le temps écoulé. Le dénivelé est une estimation du moteur gpx2elev. Le lieu correspond à la commune la plus proche ; le lien OpenStreetMap utilise les coordonnées du départ.</p>
- <p><strong>Trajets depuis <span data-origine>@@ORIGINE@@</span>.</strong> <span id="route-note">@@NOTE@@</span></p>
- <p class="surface-note"><strong>Goudron longé.</strong> Estimation sur les points du GPX d’origine, à moins de @@MARGEGOUDRON@@ m de l’axe d’une voie bitumineuse OSM et avec un écart de direction de @@ANGLEGOUDRON@@° maximum ; les croisements perpendiculaires sont exclus.
+ <p data-i18n-html="trackNote"><strong>Lecture des traces.</strong> La durée estime le temps en mouvement, avec repli sur le temps écoulé. Le dénivelé est une estimation du moteur gpx2elev. Le lieu correspond à la commune la plus proche ; le lien OpenStreetMap utilise les coordonnées du départ.</p>
+ <p><strong><span data-i18n="Trajets depuis">Trajets depuis</span> <span data-origine>@@ORIGINE@@</span>.</strong> <span id="route-note">@@NOTE@@</span></p>
+ <p class="surface-note" data-i18n-html="surfaceNote"><strong>Goudron longé.</strong> Estimation sur les points du GPX d’origine, à moins de @@MARGEGOUDRON@@ m de l’axe d’une voie bitumineuse OSM et avec un écart de direction de @@ANGLEGOUDRON@@° maximum ; les croisements perpendiculaires sont exclus.
  Échantillonnage de 5 m. « ≥ » indique le minimum repéré lorsqu’un revêtement reste incertain ; un tiret indique un calcul absent ou aucune portion confirmée malgré des revêtements incertains.
  Les filtres portent sur la distance repérée. <a href="https://wiki.openstreetmap.org/wiki/Key:surface" target="_blank" rel="noopener noreferrer">Revêtements OpenStreetMap</a>.</p>
 </div>
 <footer>
- <span>Généré le @@GENERATION@@ · GPX2DASH</span>
- <span>Routage : <a href="https://project-osrm.org/" target="_blank" rel="noopener noreferrer">OSRM</a> · Villes : <a href="https://photon.komoot.io/" target="_blank" rel="noopener noreferrer">Photon</a> ·
- © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">contributeurs OpenStreetMap</a> ·
- <a href="https://www.openstreetmap.org/fixthemap" target="_blank" rel="noopener noreferrer">Corriger la carte</a></span>
+ <span id="generated">Généré le @@GENERATION@@ · GPX2DASH</span>
+ <span><span data-i18n="Routage">Routage</span> : <a href="https://project-osrm.org/" target="_blank" rel="noopener noreferrer">OSRM</a> · <span data-i18n="Villes">Villes</span> : <a href="https://photon.komoot.io/" target="_blank" rel="noopener noreferrer">Photon</a> ·
+ © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" data-i18n="contributeurs OpenStreetMap">contributeurs OpenStreetMap</a> ·
+ <a href="https://www.openstreetmap.org/fixthemap" target="_blank" rel="noopener noreferrer" data-i18n="Corriger la carte">Corriger la carte</a></span>
 </footer>
 <dialog id="map-dialog" aria-labelledby="map-title" aria-describedby="map-origin">
  <div class="map-head">
-  <div><h2 id="map-title">Itinéraire et trace GPX</h2><p id="map-origin"></p></div>
-  <button type="button" id="map-close" autofocus>Fermer</button>
+  <div><h2 id="map-title" data-i18n="Itinéraire et trace GPX">Itinéraire et trace GPX</h2><p id="map-origin"></p></div>
+  <button type="button" id="map-close" autofocus data-i18n="Fermer">Fermer</button>
  </div>
  <div class="map-tools">
-  <div class="map-legend" aria-label="Légende de la carte"><span class="road">Trajet routier</span><span class="gpx">Trace GPX</span></div>
+  <div class="map-legend" aria-label="Légende de la carte" data-i18n-aria-label="Légende de la carte"><span class="road" data-i18n="Trajet routier">Trajet routier</span><span class="gpx" data-i18n="Trace GPX">Trace GPX</span></div>
   <div class="map-zoom">
-   <button type="button" id="map-overview">Vue d’ensemble</button>
-   <button type="button" id="map-trace">Zoom sur la trace</button>
+   <button type="button" id="map-overview" data-i18n="Vue d’ensemble">Vue d’ensemble</button>
+   <button type="button" id="map-trace" data-i18n="Zoom sur la trace">Zoom sur la trace</button>
   </div>
  </div>
- <div id="trace-map" role="region" aria-label="Carte interactive du trajet routier et de la trace GPX"></div>
+ <div id="trace-map" role="region" aria-label="Carte interactive du trajet routier et de la trace GPX" data-i18n-aria-label="Carte interactive du trajet routier et de la trace GPX"></div>
  <p id="map-status" role="status" aria-live="polite"></p>
- <p id="map-tiles-note" hidden>Fond de carte indisponible. Les tracés restent visibles ; vérifiez votre connexion Internet.</p>
+ <p id="map-tiles-note" hidden data-i18n="Fond de carte indisponible. Les tracés restent visibles ; vérifiez votre connexion Internet.">Fond de carte indisponible. Les tracés restent visibles ; vérifiez votre connexion Internet.</p>
  <div class="map-links">
-  <a id="map-download" download>Télécharger le GPX original</a>
-  <a id="map-osm" target="_blank" rel="noopener noreferrer">Ouvrir le trajet dans OpenStreetMap ↗</a>
+  <a id="map-download" download data-i18n="Télécharger le GPX original">Télécharger le GPX original</a>
+  <a id="map-osm" target="_blank" rel="noopener noreferrer" data-i18n="Ouvrir le trajet dans OpenStreetMap ↗">Ouvrir le trajet dans OpenStreetMap ↗</a>
  </div>
 </dialog>
 </main>

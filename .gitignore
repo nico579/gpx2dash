@@ -40,3 +40,6 @@ dist/
 .DS_Store
 Thumbs.db
 *.log
+
+build_venv/
+.qa/reference-projects/

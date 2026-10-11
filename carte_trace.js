@@ -1,6 +1,7 @@
 /* Carte de la trace et de son accès routier ; les segments GPX sont embarqués. */
 function initialiserCarteTraces(options) {
  "use strict";
+ const {t, text: message} = dashboardI18n;
  const {data, table, getOrigin, request, key, distance, duration, known} = options;
  const traces = new Map(data.traces.map(trace => [trace.id, trace]));
  const dialog = document.getElementById("map-dialog"), container = document.getElementById("trace-map");
@@ -29,7 +30,7 @@ function initialiserCarteTraces(options) {
   map.createPane("gpx").style.zIndex = 420;
   L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", {
    maxNativeZoom: 17, maxZoom: 19, updateWhenIdle: true, keepBuffer: 1,
-   attribution: 'Données : &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>, SRTM | Carte : &copy; <a href="https://opentopomap.org" target="_blank" rel="noopener noreferrer">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener noreferrer">CC-BY-SA</a>)'
+   attribution: 'Data: &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>, SRTM | Map: &copy; <a href="https://opentopomap.org" target="_blank" rel="noopener noreferrer">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener noreferrer">CC-BY-SA</a>)'
   }).on("tileerror", event => { failedTiles.add(event.tile); noteTiles(); })
    .on("tileload", event => { failedTiles.delete(event.tile); noteTiles(); })
    .on("tileunload", event => { failedTiles.delete(event.tile); noteTiles(); }).addTo(map);
@@ -59,16 +60,16 @@ function initialiserCarteTraces(options) {
   const json = await request(data.serveur + "/route/v1/driving/" + coordinates + "?" + new URLSearchParams({
    geometries: "geojson", overview: "full", steps: "false", alternatives: "false", generate_hints: "false"
   }), signal);
-  if (json.code !== "Ok") throw new Error("Aucun itinéraire routier trouvé depuis cette ville.");
+  if (json.code !== "Ok") throw new Error(t("Aucun itinéraire routier trouvé depuis cette ville."));
   const route = json.routes && json.routes[0], points = json.waypoints;
   if (!route || !route.geometry || route.geometry.type !== "LineString" ||
    !Array.isArray(route.geometry.coordinates) || route.geometry.coordinates.length < 2 ||
    !route.geometry.coordinates.every(p => Array.isArray(p) && p.length >= 2 &&
     Number.isFinite(p[0]) && Number.isFinite(p[1]) && Math.abs(p[0]) <= 180 && Math.abs(p[1]) <= 90) ||
    !known(route.distance) || !known(route.duration) || !Array.isArray(points) || points.length !== 2 ||
-   !points.every(p => known(p.distance))) throw new Error("Réponse routière incomplète.");
+   !points.every(p => known(p.distance))) throw new Error(t("Réponse routière incomplète."));
   if (points.some(point => point.distance > 1000))
-   throw new Error("Aucune liaison routière trouvée à proximité des points de départ (rayon de 1 km).");
+   throw new Error(t("Aucune liaison routière trouvée à proximité des points de départ (rayon de 1 km)."));
   geometryCache.set(cacheKey, route);
   return route;
  }
@@ -77,13 +78,14 @@ function initialiserCarteTraces(options) {
   controller = new AbortController();
   const signal = controller.signal, city = getOrigin();
   active = {trace, city};
+  document.getElementById("map-title").removeAttribute("data-i18n");
   document.getElementById("map-title").textContent = trace.id;
-  document.getElementById("map-origin").textContent = "Trajet aller depuis " + city.libelle;
+  message(document.getElementById("map-origin"), "Trajet aller depuis {city}", {city: city.libelle});
   document.getElementById("map-osm").href = link.href;
   const original = row.querySelector(".trace-name a[download]"), download = document.getElementById("map-download");
   download.hidden = !original;
   if (original) download.href = original.href;
-  status.textContent = "Trace GPX affichée. Chargement de l’itinéraire routier…";
+  message(status, "Trace GPX affichée. Chargement de l’itinéraire routier…");
   tilesNote.hidden = true;
   noteTiles();
   if (!dialog.open) {
@@ -98,9 +100,9 @@ function initialiserCarteTraces(options) {
    style: {color: "#c54f36", weight: 4, opacity: 1, pane: "gpx", className: "gpx-path"}
   }).addTo(map);
   L.circleMarker(city.position, {radius: 6, weight: 3, color: "#2467ae", fillColor: "#fff", fillOpacity: 1, pane: "markerPane"})
-   .bindTooltip(textNode("Départ routier : " + city.libelle)).addTo(markers);
+   .bindTooltip(textNode(t("Départ routier : {city}", {city: city.libelle}))).addTo(markers);
   L.circleMarker(trace.position, {radius: 6, weight: 3, color: "#c54f36", fillColor: "#fff", fillOpacity: 1, pane: "markerPane"})
-   .bindTooltip(textNode("Départ de la trace GPX")).addTo(markers);
+   .bindTooltip(textNode(t("Départ de la trace GPX"))).addTo(markers);
   map.invalidateSize({pan: false}); fitTrace();
   container.dataset.traceId = trace.id;
   container.dataset.origin = city.position.join(",");
@@ -112,13 +114,12 @@ function initialiserCarteTraces(options) {
     style: {color: "#2467ae", weight: 5, opacity: .85, pane: "road", className: "road-path"}
    }).addTo(map);
    container.dataset.road = "ready";
-   status.textContent = "Trajet routier : " + distance(route.distance) + " · " + duration(route.duration) +
-    ". Trace GPX affichée en orange.";
+   message(status, "Trajet routier : {distance} · {duration}. Trace GPX affichée en orange.", () => ({distance: distance(route.distance), duration: duration(route.duration)}));
    fitAll();
   } catch (error) {
    if (signal.aborted || !dialog.open) return;
    container.dataset.road = "unavailable";
-   status.textContent = error.message + " La trace GPX reste affichée.";
+   message(status, "{error} La trace GPX reste affichée.", {error: error.message});
    fitTrace();
   }
  }
@@ -129,7 +130,7 @@ function initialiserCarteTraces(options) {
   if (!trace || !trace.segments.length) return;
   event.preventDefault();
   open(trace, row, link).catch(error => {
-   status.textContent = "Carte indisponible : " + error.message;
+   message(status, "Carte indisponible : {error}", {error: error.message});
    container.dataset.road = "unavailable";
   });
  });

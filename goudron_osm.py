@@ -263,7 +263,7 @@ class ClientOverpass:
                 _valider_voies(data)
                 return data
             except HTTPError as exc:
-                erreur = f"Overpass indisponible (HTTP {exc.code}). Relancez avec --goudron pour reprendre."
+                erreur = f"Overpass indisponible (HTTP {exc.code}). Relancez avec --asphalt pour reprendre."
                 if exc.code in (429, 502, 503, 504) and tentative < 3:
                     attente = 30 * (2 ** tentative) if exc.code == 429 else 10 * (2 ** tentative)
                     retry_after = exc.headers.get("Retry-After") if exc.headers else None
@@ -281,7 +281,7 @@ class ClientOverpass:
                 if attente is None:
                     raise ValueError(erreur) from exc
             except (URLError, OSError) as exc:
-                erreur = "Overpass : réseau indisponible ou délai dépassé. Relancez avec --goudron."
+                erreur = "Overpass : réseau indisponible ou délai dépassé. Relancez avec --asphalt."
                 if tentative >= 1:
                     raise ValueError(erreur) from exc
                 attente = 10
@@ -417,7 +417,7 @@ def ajouter_goudron_osm(resultats, *, dossier_cache, en_ligne=False, marge=MARGE
             missing.append((trace, source_key, mesure_key))
         else:
             bilan["erreurs"] += 1
-            finir(trace, {"erreur_goudron": "Goudron non calculé : lancer gpx2dash.py avec --goudron (Internet requis)."})
+            finir(trace, {"erreur_goudron": "Goudron non calculé : lancer gpx2dash.py avec --asphalt (Internet requis)."})
     # Regrouper les traces proches limite les doublons de voies dans les réponses.
     missing.sort(key=lambda item: tuple(round(v, 1) for v in item[0]["lat_lon_depart"]))
     lots, lot, count = [], [], 0

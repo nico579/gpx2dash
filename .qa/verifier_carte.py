@@ -1,5 +1,6 @@
 """Vérifie la carte combinée, les segments, l'origine et les erreurs, sans réseau."""
 import base64
+import os
 from pathlib import Path
 import sys
 from threading import Thread
@@ -34,8 +35,8 @@ thread = Thread(target=lambda: server.serve_forever(poll_interval=.02), daemon=T
 thread.start()
 base = f"http://127.0.0.1:{server.server_port}/"
 with sync_playwright() as playwright:
-    browser = playwright.chromium.launch(headless=True, channel="msedge")
-    page = browser.new_page(viewport={"width": 1440, "height": 1050})
+    browser = playwright.chromium.launch(headless=True, channel=None if os.environ.get("GPX2DASH_BROWSER") == "chromium" else "msedge")
+    page = browser.new_page(locale="fr-FR", viewport={"width": 1440, "height": 1050})
     errors, route_requests, tile_requests = [], [], []
     mode = {"value": "ok", "tiles": "ok"}
     page.on("pageerror", lambda error: errors.append(str(error)))

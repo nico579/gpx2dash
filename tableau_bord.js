@@ -1,6 +1,7 @@
 /* Tableau autonome : tri, filtres combinés, recherche Photon et matrices OSRM sur demande. */
 (() => {
  "use strict";
+ const {t, text: message} = dashboardI18n;
  const data = JSON.parse(document.getElementById("dashboard-data").textContent);
  const table = document.getElementById("traces"), body = table.tBodies[0];
  const rows = Array.from(body.rows), headers = Array.from(table.tHead.rows[0].cells);
@@ -30,9 +31,9 @@
   cell.className = "column-filter";
   const operator = document.createElement("select");
   operator.id = "filter-" + index + "-op";
-  operator.setAttribute("aria-label", "Opérateur pour " + spec.name);
+  operator.setAttribute("aria-label", t("Opérateur pour {name}", {name: t(spec.name)}));
   operator.setAttribute("aria-describedby", "filter-help");
-  for (const [value, label] of [["", "Tous"], ["=", "="], [">", ">"], ["<", "<"], ["between", "Entre (inclus)"]]) {
+  for (const [value, label] of [["", t("Tous")], ["=", "="], [">", ">"], ["<", "<"], ["between", t("Entre (inclus)")]]) {
    const option = document.createElement("option");
    option.value = value; option.textContent = label; operator.appendChild(option);
   }
@@ -58,13 +59,17 @@
  });
  function updateFilterInputs(control) {
   const between = control.operator.value === "between", inactive = !control.operator.value;
+  const name = t(control.name);
+  control.operator.setAttribute("aria-label", t("Opérateur pour {name}", {name}));
+  control.operator.options[0].textContent = t("Tous");
+  control.operator.options[4].textContent = t("Entre (inclus)");
   const unit = control.unit ? " (" + control.unit + ")" : "";
   control.first.disabled = inactive;
   control.second.disabled = !between; control.second.hidden = !between;
-  control.first.setAttribute("aria-label", control.name + " : " + (between ? "borne basse" : "valeur") + unit);
-  control.second.setAttribute("aria-label", control.name + " : borne haute" + unit);
-  control.first.placeholder = (between ? "Min · " : "") + (control.unit || control.placeholder || "");
-  control.second.placeholder = "Max · " + (control.unit || control.placeholder || "");
+  control.first.setAttribute("aria-label", t("{name} : {bound}{unit}", {name, bound: t(between ? "borne basse" : "valeur"), unit}));
+  control.second.setAttribute("aria-label", t("{name} : {bound}{unit}", {name, bound: t("borne haute"), unit}));
+  control.first.placeholder = (between ? "Min · " : "") + (control.unit || t(control.placeholder || ""));
+  control.second.placeholder = "Max · " + (control.unit || t(control.placeholder || ""));
  }
  function readFilterValue(field, control) {
   const value = field.value.trim();
@@ -72,17 +77,17 @@
   if (control.type === "number") {
    const number = value.replace(/\s/g, "").replace(",", ".");
    if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(number) || !Number.isFinite(Number(number)))
-    return {error: "Nombre invalide."};
+    return {error: t("Nombre invalide.")};
    return {value: Number(number)};
   }
   if (control.type === "date") {
-   if (!field.validity.valid || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return {error: "Date invalide."};
+   if (!field.validity.valid || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return {error: t("Date invalide.")};
    return {value};
   }
   return {value: normalise(value.replace(/\s+/g, " "))};
  }
  function compareValues(a, b, index) {
-  return index < 2 ? a.localeCompare(b, "fr") : a - b;
+  return index < 2 ? a.localeCompare(b, dashboardI18n.locale) : a - b;
  }
  function filterError(control, message, fields) {
   control.error.textContent = message; control.error.hidden = false;
@@ -104,14 +109,13 @@
    }
    if (values.some(value => value.missing)) { pending++; return; }
    if (operator.value === "between" && compareValues(values[0].value, values[1].value, index) > 0) {
-    filterError(control, "Bornes inversées.", fields); invalid++; return;
+    filterError(control, t("Bornes inversées."), fields); invalid++; return;
    }
    conditions.push({index, operator: operator.value, lower: values[0].value, upper: values[1]?.value});
   });
-  const messages = [conditions.length ?
-   conditions.length + " condition" + (conditions.length > 1 ? "s actives." : " active.") : "Aucun filtre de colonne."];
-  if (pending) messages.push(pending + " condition" + (pending > 1 ? "s à compléter" : " à compléter") + " (non appliquée" + (pending > 1 ? "s)." : ")."));
-  if (invalid) messages.push(invalid + " condition" + (invalid > 1 ? "s invalides" : " invalide") + " (non appliquée" + (invalid > 1 ? "s)." : ")."));
+  const messages = [conditions.length ? t("{n} condition(s) active(s).", {n: conditions.length}) : t("Aucun filtre de colonne.")];
+  if (pending) messages.push(t("{n} condition(s) à compléter (non appliquées).", {n: pending}));
+  if (invalid) messages.push(t("{n} condition(s) invalide(s) (non appliquées).", {n: invalid}));
   filtersStatus.textContent = messages.join(" ");
   resetFilters.disabled = !searchInput.value && !filterControls.some(control => control.operator.value || control.first.value || control.second.value);
   return conditions;
@@ -133,7 +137,7 @@
  const coordinate = p => p.map(v => v.toFixed(6)).join(",");
  const key = (position, origin) => data.serveur + "|" + coordinate(origin) + "|" + coordinate(position);
  const known = v => typeof v === "number" && Number.isFinite(v) && v >= 0;
- const distance = v => known(v) ? (v / 1000).toFixed(1).replace(".", ",") + " km" : "—";
+ const distance = v => known(v) ? (v / 1000).toFixed(1).replace(".", dashboardI18n.language === "fr" ? "," : ".") + " km" : "—";
  const duration = v => {
   if (!known(v)) return "—";
   const minutes = Math.round(v / 60), h = Math.floor(minutes / 60), m = minutes % 60;
@@ -143,6 +147,7 @@
  let lastRequest = -Infinity;
  let requestQueue = Promise.resolve();
  const routeCache = new Map(), cityCache = new Map();
+ let currentRoutes = null;
  function readStorage(name, fallback) {
   try { return JSON.parse(localStorage.getItem(name)) || fallback; } catch { return fallback; }
  }
@@ -174,7 +179,7 @@
     !conditions.every(condition => matchesCondition(row, condition));
    if (!row.hidden) visible++;
   });
-  count.textContent = visible + " / " + rows.length + " trace(s)";
+  count.textContent = t("{visible} / {total} trace(s)", {visible, total: rows.length});
   empty.hidden = visible !== 0;
  }
  function refreshSearch() {
@@ -186,7 +191,7 @@
    const av = a.cells[column].dataset.sort, bv = b.cells[column].dataset.sort;
    if (av === "") return bv === "" ? 0 : 1;
    if (bv === "") return -1;
-   return (ascending ? 1 : -1) * (column >= 2 ? Number(av) - Number(bv) : av.localeCompare(bv, "fr"));
+   return (ascending ? 1 : -1) * (column >= 2 ? Number(av) - Number(bv) : av.localeCompare(bv, dashboardI18n.locale));
   });
   rows.forEach(row => body.appendChild(row));
   headers.forEach((h, i) => h.setAttribute("aria-sort", i === column ? (ascending ? "ascending" : "descending") : "none"));
@@ -228,13 +233,13 @@
  }
  function applyOrigin(city, routes) {
   origin = city;
+  currentRoutes = routes;
   let completed = 0;
   data.traces.forEach(trace => {
    const row = rowById.get(trace.id);
    if (!row) return;
    const route = routes.get(key(trace.position, city.position)) || {};
-   const tooltip = route.erreur_route || (route.date_route ?
-    "OSRM, relevé le " + route.date_route + ". Sans trafic en temps réel." : "Trajet non renseigné.");
+   const tooltip = t(route.erreur_route || "") || (route.date_route ? t("OSRM, relevé le {date}. Sans trafic en temps réel.", {date: route.date_route}) : t("Trajet non renseigné."));
    for (const [index, value, label] of [[5, route.distance_route_m, distance], [6, route.duree_route_s, duration]]) {
     row.cells[index].dataset.sort = known(value) ? String(value) : "";
     row.cells[index].dataset.filter = known(value) ?
@@ -248,14 +253,11 @@
   });
   document.querySelectorAll("[data-origine]").forEach(element => element.textContent = city.libelle);
   document.getElementById("routes-count").textContent = completed + " / " + data.nombre_valides;
-  document.getElementById("route-note").textContent =
-   "Trajets aller en voiture calculés par OSRM, sans trafic en temps réel, jusqu’à la route accessible la plus proche du départ. " +
-   "L’approche à pied n’est pas incluse. " + (data.nombre_valides - completed) +
-   " trajet(s) non renseigné(s) ; la raison apparaît au survol des cellules.";
+  message(document.getElementById("route-note"), "routeNote", {missing: data.nombre_valides - completed, errors: data.errors});
   sort(); refreshSearch();
   return completed;
  }
- function abortError() { return new DOMException("Calcul annulé.", "AbortError"); }
+ function abortError() { return new DOMException(t("Calcul annulé."), "AbortError"); }
  async function pause(ms, signal) {
   if (signal && signal.aborted) throw abortError();
   if (ms <= 0) return;
@@ -280,15 +282,15 @@
   const timer = setTimeout(() => timeout.abort(), 25000);
   try {
    const response = await fetch(url, {signal: timeout.signal, headers: {Accept: "application/json"}});
-   if (response.status === 429) throw new Error("Service occupé (HTTP 429). Patientez quelques instants, puis relancez le calcul.");
-   if (!response.ok && response.status !== 400) throw new Error("Service indisponible (HTTP " + response.status + ").");
+   if (response.status === 429) throw new Error(t("Service occupé (HTTP 429). Patientez quelques instants, puis relancez le calcul."));
+   if (!response.ok && response.status !== 400) throw new Error(t("Service indisponible (HTTP {code}).", {code: response.status}));
    const result = await response.json();
-   if (!response.ok && !result.code) throw new Error("Requête refusée.");
+   if (!response.ok && !result.code) throw new Error(t("Requête refusée."));
    return result;
   } catch (error) {
    if (signal && signal.aborted) throw abortError();
-   if (error.name === "AbortError") throw new Error("Délai du service dépassé. Réessayez.");
-   if (error instanceof TypeError) throw new Error("Connexion au service impossible. Vérifiez votre accès Internet.");
+   if (error.name === "AbortError") throw new Error(t("Délai du service dépassé. Réessayez."));
+   if (error instanceof TypeError) throw new Error(t("Connexion au service impossible. Vérifiez votre accès Internet."));
    throw error;
   } finally {
    clearTimeout(timer);
@@ -300,14 +302,14 @@
   const query = input.value.trim();
   if (query.length < 2) return;
   setBusy(true);
-  status.textContent = "Recherche de la ville…";
+  message(status, "Recherche de la ville…");
   try {
-   let cities = cityCache.get(normalise(query));
+   let cities = cityCache.get(dashboardI18n.language + "|" + normalise(query));
    if (!cities) {
     const json = await request(data.geocodeur + "?" + new URLSearchParams({
-     q: query, limit: "8", lang: "fr", osm_tag: "place"
+     q: query, limit: "8", lang: dashboardI18n.language, osm_tag: "place"
     }));
-    if (!Array.isArray(json.features)) throw new Error("Réponse de recherche incomplète.");
+    if (!Array.isArray(json.features)) throw new Error(t("Réponse de recherche incomplète."));
     const seen = new Set();
     cities = json.features.flatMap(feature => {
      const p = feature.properties || {}, coordinates = feature.geometry && feature.geometry.coordinates;
@@ -318,20 +320,19 @@
      seen.add(id);
      return [{position, libelle: ["name", "postcode", "state", "country"].map(k => p[k]).filter(Boolean).join(", ")}];
     });
-    cityCache.set(normalise(query), cities);
+    cityCache.set(dashboardI18n.language + "|" + normalise(query), cities);
    }
    setChoices(cities);
-   status.textContent = cities.length ? "Sélectionnez la ville, puis cliquez sur « Calculer les trajets »." :
-    "Aucune ville trouvée. Précisez le département ou le pays.";
+   message(status, cities.length ? "Sélectionnez la ville, puis cliquez sur « Calculer les trajets »." : "Aucune ville trouvée. Précisez le département ou le pays.");
   } catch (error) {
    setChoices([]);
-   status.textContent = error.message;
+   message(status, error.message);
   } finally { setBusy(false); }
  }
  form.addEventListener("submit", searchCities);
  input.addEventListener("input", () => {
   setChoices([]);
-  status.textContent = "Cliquez sur « Rechercher » pour trouver la ville.";
+  message(status, "Cliquez sur « Rechercher » pour trouver la ville.");
  });
  async function matrix(destinations, city, signal, priorityOrigin = false) {
   const positions = [city.position, ...destinations];
@@ -341,21 +342,21 @@
   const json = await request(data.serveur + "/table/v1/driving/" + coordinates + "?" +
    new URLSearchParams({sources: "0", destinations: destinations.map((_, i) => i + 1).join(";"),
     annotations: "distance,duration", generate_hints: "false"}), signal);
-  if (json.code !== "Ok") throw Object.assign(new Error("OSRM : aucun point routier ou itinéraire trouvé."), {code: json.code});
+  if (json.code !== "Ok") throw Object.assign(new Error(t("OSRM : aucun point routier ou itinéraire trouvé.")), {code: json.code});
   const distances = json.distances && json.distances[0], durations = json.durations && json.durations[0];
   const points = json.destinations, source = json.sources && json.sources[0];
   if (!Array.isArray(distances) || !Array.isArray(durations) || !Array.isArray(points) || !source ||
    [distances, durations, points].some(list => list.length !== destinations.length))
-   throw new Error("OSRM : réponse incomplète.");
+   throw new Error(t("OSRM : réponse incomplète."));
   if (source.distance > 1000 && !priorityOrigin)
    return matrix(destinations, city, signal, true);
   const timestamp = new Date().toISOString();
   return destinations.map((_, i) => {
    const route = {date_route: timestamp, route_cacheable: true};
-   if (source.distance > 1000) route.erreur_route = "La ville de départ est à plus de 1 km du réseau routier.";
-   else if (distances[i] == null || durations[i] == null) route.erreur_route = "Aucune liaison routière depuis la ville de départ.";
-   else if (!known(distances[i]) || !known(durations[i])) throw new Error("OSRM : distance ou durée invalide.");
-   else if (points[i].distance > 1000) route.erreur_route = "Aucune liaison routière trouvée à proximité du départ de la trace (rayon de 1 km).";
+   if (source.distance > 1000) route.erreur_route = t("La ville de départ est à plus de 1 km du réseau routier.");
+   else if (distances[i] == null || durations[i] == null) route.erreur_route = t("Aucune liaison routière depuis la ville de départ.");
+   else if (!known(distances[i]) || !known(durations[i])) throw new Error(t("OSRM : distance ou durée invalide."));
+   else if (points[i].distance > 1000) route.erreur_route = t("Aucune liaison routière trouvée à proximité du départ de la trace (rayon de 1 km).");
    else Object.assign(route, {distance_route_m: distances[i], duree_route_s: durations[i], distance_acces_m: points[i].distance || 0});
    return route;
   });
@@ -390,7 +391,7 @@
    if (fresh(routeCache.get(group.key))) { results.set(group.key, routeCache.get(group.key)); finished += group.count; }
    else missing.push(group);
   });
-  const progress = () => { status.textContent = "Calcul depuis " + city.libelle + " : " + finished + " / " + data.traces.length + " traces traitées…"; };
+  const progress = () => { message(status, "Calcul depuis {city} : {n} / {total} traces traitées…", {city: city.libelle, n: finished, total: data.traces.length}); };
   progress();
   try {
    for (let i = 0; i < missing.length; i += 25) {
@@ -404,11 +405,9 @@
    if (controller.signal.aborted) throw abortError();
    const completed = applyOrigin(city, results);
    writeStorage("gpx2dash.origin.v1", city);
-   status.textContent = completed + " trajets renseignés depuis " + city.libelle + ". " +
-    (data.nombre_valides - completed) + " non renseignés.";
+   message(status, "{n} trajets renseignés depuis {city}. {missing} non renseignés.", {n: completed, city: city.libelle, missing: data.nombre_valides - completed});
   } catch (error) {
-   status.textContent = (error.name === "AbortError" ? "Calcul annulé." : error.message) +
-    " Les valeurs affichées correspondent à " + origin.libelle + ". Les lots terminés sont conservés pour reprendre.";
+   message(status, "{error} Les valeurs affichées correspondent à {city}. Les lots terminés sont conservés pour reprendre.", {error: error.name === "AbortError" ? t("Calcul annulé.") : error.message, city: origin.libelle});
   } finally { controller = null; setBusy(false); }
  });
  cancelButton.addEventListener("click", () => { if (controller) controller.abort(); });
@@ -422,9 +421,43 @@
   });
   if (data.traces.every(trace => routes.has(key(trace.position, saved.position)))) {
    applyOrigin(saved, routes); setChoices([saved]); input.value = saved.libelle;
-   status.textContent = "Dernier départ restauré : " + saved.libelle + ". Résultats repris du cache.";
+   message(status, "Dernier départ restauré : {city}. Résultats repris du cache.", {city: saved.libelle});
   }
  }
+ function renderLanguage() {
+  filterControls.forEach(updateFilterInputs);
+  rows.forEach(row => {
+   const cells = row.cells, date = cells[0].querySelector(".date");
+   if (date) date.textContent = cells[0].dataset.sort ? new Date(cells[0].dataset.sort + "T12:00:00").toLocaleDateString(dashboardI18n.locale) : t("Date inconnue");
+   for (const index of [2, 4, 5, 6]) {
+    const value = cells[index].dataset.sort === "" ? null : Number(cells[index].dataset.sort);
+    cells[index].textContent = index === 2 || index === 5 ? distance(value) : duration(value);
+   }
+   const value = cells[7].dataset.sort === "" ? null : Number(cells[7].dataset.sort), uncertain = Number(row.dataset.uncertain || 0);
+   cells[7].textContent = (uncertain && value !== null ? "≥ " : "") + distance(value);
+   if (uncertain) {
+    const detail = document.createElement("span"); detail.className = "detail";
+    detail.textContent = t("{km} incertains", {km: distance(uncertain)}); cells[7].appendChild(detail);
+   }
+   // Only explicit application labels are marked. Towns, filenames and errors from GPX parsing remain verbatim.
+   row.querySelectorAll("[data-row-i18n]").forEach(el => el.textContent = t(el.dataset.rowI18n));
+   for (const index of [3, 5, 6, 7]) {
+    const cell = cells[index]; if (!cell.dataset.originalTitle) cell.dataset.originalTitle = cell.title;
+    const routeDate = cell.dataset.originalTitle.match(/^OSRM, relevé le (.*)\. Sans trafic en temps réel\.$/);
+    cell.title = routeDate ? t("OSRM, relevé le {date}. Sans trafic en temps réel.", {date: routeDate[1]}) : t(cell.dataset.originalTitle);
+    if (index === 7 && !cell.dataset.error) cell.title = t("asphaltTitle", {margin: data.asphaltTolerance, angle: data.asphaltAngle, date: cell.dataset.osmDate ? t("Données OSM du {date}.", {date: cell.dataset.osmDate}) : ""});
+   }
+  });
+  document.querySelector("[data-total-distance]").textContent = distance(data.totalDistance);
+  document.querySelector("[data-total-ascent]").textContent = Math.round(data.totalAscent).toLocaleString(dashboardI18n.locale) + " m";
+  message(document.getElementById("generated"), "Généré le {date} · GPX2DASH", () => ({date: new Date(data.generated).toLocaleString(dashboardI18n.locale, {dateStyle: "short", timeStyle: "short"})}));
+  const missing = rows.filter(row => row.cells[5].dataset.sort === "" && row.cells[1].dataset.sort !== "").length;
+  message(document.getElementById("route-note"), "routeNote", {missing, errors: data.errors});
+  if (currentRoutes) applyOrigin(origin, currentRoutes);
+  sort(); refreshSearch();
+ }
+ document.addEventListener("dashboard-language", renderLanguage);
+ renderLanguage();
  initialiserCarteTraces({data, table, getOrigin: () => origin, request, key, distance, duration, known});
  refreshSearch();
 })();

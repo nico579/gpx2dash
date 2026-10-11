@@ -1,4 +1,5 @@
 """Vérifie les opérateurs des huit colonnes, leur combinaison et le recalcul OSRM."""
+import os
 from pathlib import Path
 import sys
 from threading import Thread
@@ -69,8 +70,8 @@ output = generer_tableau_bord(results, root / ".qa" / "filtres_exemple.html")
 server, thread, base = start_server(output)
 try:
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True, channel="msedge")
-        page = browser.new_page(viewport={"width": 1600, "height": 1180})
+        browser = playwright.chromium.launch(headless=True, channel=None if os.environ.get("GPX2DASH_BROWSER") == "chromium" else "msedge")
+        page = browser.new_page(locale="fr-FR", viewport={"width": 1600, "height": 1180})
         errors, requests = [], []
         page.on("pageerror", lambda error: errors.append(str(error)))
         def routing(route):
@@ -196,12 +197,15 @@ try:
 finally:
     stop_server(server, thread)
 
+if "--fixtures-only" in sys.argv:
+    raise SystemExit(0)
+
 # Vérification et aperçu du vrai catalogue, sans appel réseau.
 server, thread, base = start_server(root / "tableau_bord.html")
 try:
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True, channel="msedge")
-        page = browser.new_page(viewport={"width": 1600, "height": 1180})
+        browser = playwright.chromium.launch(headless=True, channel=None if os.environ.get("GPX2DASH_BROWSER") == "chromium" else "msedge")
+        page = browser.new_page(locale="fr-FR", viewport={"width": 1600, "height": 1180})
         errors, network = [], []
         page.on("pageerror", lambda error: errors.append(str(error)))
         def no_network(route):

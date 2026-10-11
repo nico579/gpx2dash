@@ -1,0 +1,128 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        default: ""
+      tag:
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Python tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-22.04, macos-15]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install locked dependencies
+        run: python -m pip install --require-hashes -r requirements-dev.txt
+      - name: Lint and syntax
+        run: |
+          python -m ruff check gpx2dash.py tableau_bord.py trajets_osrm.py goudron_osm.py denivele_gpx2elev.py version.py build.py tools test_*.py
+          python -m compileall -q gpx2elev
+          node --check tableau_bord.js
+          node --check carte_trace.js
+          node --check dashboard_i18n.js
+      - name: Check release version
+        if: inputs.tag != ''
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: python -c "import os; from version import VERSION; assert os.environ['RELEASE_TAG'] == 'v' + VERSION"
+      - name: Test calculations, cache and rendering
+        run: python -X utf8 -m unittest discover -v
+      - name: Test preview helper
+        run: python -X utf8 .qa/test_serveur_preview.py
+      - name: Offline source smoke
+        run: python -X utf8 tools/smoke_bundle.py
+
+  browser:
+    name: Dashboard EN/FR and sticky headers
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: python -m pip install --require-hashes -r requirements-dev.txt
+      - run: python -m playwright install --with-deps chromium
+      - name: All column operators, AND filters, sorting and routing changes
+        env:
+          GPX2DASH_BROWSER: chromium
+        run: python -X utf8 .qa/verifier_filtres.py --fixtures-only
+      - name: Map, GPX segments, download and route failures
+        env:
+          GPX2DASH_BROWSER: chromium
+        run: python -X utf8 .qa/verifier_carte.py
+      - name: Languages, persistence, vertical and horizontal scrolling, mobile
+        env:
+          GPX2DASH_BROWSER: chromium
+        run: python -X utf8 .qa/verifier_langues.py
+
+  bundles:
+    name: Bundle (${{ matrix.asset }})
+    needs: [tests, browser]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            asset: gpx2dash-windows-x86_64
+            executable: dist/gpx2dash/gpx2dash.exe
+            format: zip
+          - os: ubuntu-22.04
+            asset: gpx2dash-linux-x86_64
+            executable: dist/gpx2dash/gpx2dash
+            format: gztar
+          - os: macos-15
+            asset: gpx2dash-macos-arm64
+            executable: dist/gpx2dash/gpx2dash
+            format: gztar
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-build.txt
+      - name: Build on the native GitHub runner
+        run: python build.py
+      - name: Exercise the actual executable
+        # Source Python only prepares synthetic fixtures; processing is performed by the frozen binary.
+        run: build_venv/${{ runner.os == 'Windows' && 'Scripts/python.exe' || 'bin/python' }} -X utf8 tools/smoke_bundle.py ${{ matrix.executable }}
+      - name: Archive tested bundle and hash
+        run: python tools/package_bundle.py ${{ matrix.asset }} --format ${{ matrix.format }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}.*
+          if-no-files-found: error

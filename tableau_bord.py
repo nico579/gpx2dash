@@ -98,7 +98,9 @@ def _cellule_goudron(resultat):
         titre += " Revêtement absent ou ambigu sur les kilomètres incertains. Le filtre porte sur le minimum repéré."
     if resultat.get("goudron_date_osm"):
         titre += " Données OSM du " + str(resultat["goudron_date_osm"]) + "."
-    return _cellule(distance, contenu, "numeric goudron", titre=titre, unite_filtre="km")
+    return _cellule(distance, contenu, "numeric goudron", titre=titre, unite_filtre="km").replace(
+        '<td ', f'<td data-osm-date="{escape(str(resultat.get("goudron_date_osm") or ""), quote=True)}"'
+        f' data-error="{escape(str(resultat.get("erreur_goudron") or ""), quote=True)}" ', 1)
 
 
 def _lien_fichier(chemin, dossier_sortie):
@@ -125,8 +127,10 @@ def _segments_carte(resultat):
 
 def generer_tableau_bord(resultats, fichier_sortie, *, libelle_origine="Mairie de Garéoult",
                          origine_route=DEPART_GAREOULT, serveur_osrm=SERVEUR_OSRM,
-                         marge_goudron=MARGE_GOUDRON, angle_goudron=ANGLE_GOUDRON):
+                         marge_goudron=MARGE_GOUDRON, angle_goudron=ANGLE_GOUDRON, langue=None):
     """Une ligne par fichier ; recherche, tri et filtres locaux, routage sur demande."""
+    if langue not in (None, "en", "fr"):
+        raise ValueError("Language must be en or fr.")
     sortie = Path(fichier_sortie).resolve()
     lignes = []
     valides = [res for res in resultats if "erreur" not in res]
@@ -146,9 +150,9 @@ def generer_tableau_bord(resultats, fichier_sortie, *, libelle_origine="Mairie d
         contenu_date = f'<span class="date">{date_affichee}</span><span class="trace-name">{nom_affiche}</span>'
         ville = str(res.get("ville") or "Lieu inconnu")
         if "erreur" in res:
-            lieu = f'<span class="error">Trace illisible</span><span class="detail">{escape(str(res["erreur"]))}</span>'
+            lieu = f'<span class="error" data-row-i18n="Trace illisible">Trace illisible</span><span class="detail">{escape(str(res["erreur"]))}</span>'
         else:
-            lieu = escape(ville)
+            lieu = escape(ville) if res.get("ville") else '<span data-row-i18n="Lieu inconnu">Lieu inconnu</span>'
             if res.get("lat_lon_depart"):
                 latitude, longitude = res["lat_lon_depart"]
                 lieu += f'<span class="detail">{latitude:.5f}, {longitude:.5f}</span>'
@@ -157,7 +161,7 @@ def generer_tableau_bord(resultats, fichier_sortie, *, libelle_origine="Mairie d
                 attributs_carte = ' aria-haspopup="dialog" aria-controls="map-dialog"' if carte else ""
                 libelle_lien = "Itinéraire et trace GPX" if carte else "Itinéraire OpenStreetMap ↗"
                 lieu += (f'<a class="route-link"{attributs_carte} href="{escape(res["itineraire_url"], quote=True)}"'
-                         f' target="_blank" rel="noopener noreferrer">{libelle_lien}</a>')
+                         f' target="_blank" rel="noopener noreferrer" data-row-i18n="{libelle_lien}">{libelle_lien}</a>')
         plus, moins = _nombre(res.get("denivele_pos")), _nombre(res.get("denivele_neg"))
         denivele = "—" if plus is None else f'+{plus:,.0f} m'.replace(",", " ")
         if moins is not None:
@@ -175,7 +179,8 @@ def generer_tableau_bord(resultats, fichier_sortie, *, libelle_origine="Mairie d
             _cellule(_nombre(res.get("duree_route_s")), _duree(res.get("duree_route_s")), titre=titre_route, unite_filtre="min"),
             _cellule_goudron(res),
         ]
-        lignes.append(f'<tr data-id="{escape(nom, quote=True)}">' + "".join(cellules) + '</tr>')
+        lignes.append(f'<tr data-id="{escape(nom, quote=True)}"'
+                      f' data-uncertain="{_nombre(res.get("goudron_incertain_m")) or 0}">' + "".join(cellules) + '</tr>')
     routes_connues = sum(_nombre(res.get("distance_route_m")) is not None
                         and _nombre(res.get("duree_route_s")) is not None for res in valides)
     erreurs = len(resultats) - len(valides)
@@ -200,6 +205,9 @@ def generer_tableau_bord(resultats, fichier_sortie, *, libelle_origine="Mairie d
                 cle: res[cle] for cle in CHAMPS_ROUTE if cle in res
             }
     donnees = json.dumps({
+        "language": langue, "asphaltTolerance": marge_goudron, "asphaltAngle": angle_goudron,
+        "totalDistance": total_distance, "totalAscent": total_denivele, "errors": erreurs,
+        "generated": datetime.now().astimezone().isoformat(),
         "origine": {"libelle": libelle_origine, "position": coordonnees(origine_route)},
         "serveur": serveur_osrm.rstrip("/"), "geocodeur": GEOCODEUR,
         "traces": traces, "cache": cache, "nombre_valides": len(valides),
@@ -217,6 +225,7 @@ def generer_tableau_bord(resultats, fichier_sortie, *, libelle_origine="Mairie d
         "DONNEES": donnees,
         "LEAFLETSTYLE": (leaflet / "leaflet.css").read_text(encoding="utf-8"),
         "SCRIPT": "\n".join([bibliotheque,
+                             (ressources / "dashboard_i18n.js").read_text(encoding="utf-8"),
                              (ressources / "carte_trace.js").read_text(encoding="utf-8"),
                              (ressources / "tableau_bord.js").read_text(encoding="utf-8")]),
         "GENERATION": datetime.now().strftime("%d/%m/%Y à %H:%M"),
