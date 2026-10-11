@@ -312,7 +312,9 @@ minimum; unknown values are never treated as zero.
 Download failures also leave a dash, with details in the tooltip.
 **Rerun with `--asphalt` to resume missing tracks**. Successful measurements
 are retained. Transient Overpass failures use bounded retries and respect
-the server's requested delay.
+the server's requested delay. A batch too heavy for the server (timeout or
+oversized response) is split in two until the responsible track is isolated,
+so the other tracks are still measured.
 
 Change tolerances with:
 

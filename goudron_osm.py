@@ -223,8 +223,15 @@ def _lire_json(path):
         return {}
 
 
+class LotTropLourd(ValueError):
+    """Échec propre à une requête (délai, mémoire ou taille) : un lot plus petit peut aboutir."""
+
+
 def _valider_voies(data):
-    if data.get("remark") or not isinstance(data.get("elements"), list):
+    if data.get("remark"):
+        # Overpass signale ainsi un délai ou une mémoire dépassés pour cette requête.
+        raise LotTropLourd("Overpass : réponse incomplète ; calcul du goudron non effectué.")
+    if not isinstance(data.get("elements"), list):
         raise ValueError("Overpass : réponse incomplète ; calcul du goudron non effectué.")
     for voie in data["elements"]:
         if not isinstance(voie, dict):
@@ -258,7 +265,7 @@ class ClientOverpass:
                 with urlopen(request, timeout=55) as response:
                     raw = response.read(32 * 1024 * 1024 + 1)
                 if len(raw) > 32 * 1024 * 1024:
-                    raise ValueError("Overpass : réponse trop volumineuse.")
+                    raise LotTropLourd("Overpass : réponse trop volumineuse.")
                 data = json.loads(raw)
                 _valider_voies(data)
                 return data
@@ -432,7 +439,10 @@ def ajouter_goudron_osm(resultats, *, dossier_cache, en_ligne=False, marge=MARGE
         lots.append(lot)
     erreur_service = None
     rayon = int(math.ceil((50 + tolerance_geometrie + 5) / 100) * 100)
-    for lot in lots:
+    # Une pile : les deux moitiés d'un lot coupé passent avant les lots suivants.
+    lots.reverse()
+    while lots:
+        lot = lots.pop()
         try:
             if erreur_service:
                 raise ValueError(erreur_service)
@@ -445,6 +455,16 @@ def ajouter_goudron_osm(resultats, *, dossier_cache, en_ligne=False, marge=MARGE
             data = client.telecharger(query)
             ecrire_json(path, data)
             documents[fichier] = (data, _VoiesOSM(_valider_voies(data)))
+        except LotTropLourd as exc:
+            # Propre à ce lot : coupé en deux, comme les lots OSRM, jusqu'à isoler
+            # la trace en cause. Les autres lots ne sont pas condamnés.
+            if len(lot) > 1:
+                milieu = len(lot) // 2
+                lots.extend([lot[milieu:], lot[:milieu]])
+            else:
+                bilan["erreurs"] += 1
+                finir(lot[0][0], {"erreur_goudron": str(exc)})
+            continue
         except (ValueError, OSError) as exc:
             erreur_service = str(exc)
             for trace, _, _ in lot:

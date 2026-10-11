@@ -10,7 +10,7 @@ from urllib.error import HTTPError
 
 from pyproj import Geod, Transformer
 
-from goudron_osm import (ClientOverpass, ajouter_goudron_osm, categorie_surface,
+from goudron_osm import (ClientOverpass, LotTropLourd, ajouter_goudron_osm, categorie_surface,
                          mesurer_goudron, segments_originaux, _requete, _VoiesOSM)
 from tableau_bord import generer_tableau_bord
 
@@ -134,14 +134,47 @@ class CacheTests(unittest.TestCase):
         self._write_gpx(self.points)
         self.road = voie(segment((0, 0), (1000, 0)))
 
-    def _write_gpx(self, points):
+    def _write_gpx(self, points, path=None):
         raw = "<gpx><trk><trkseg>" + "".join(f'<trkpt lat="{lat}" lon="{lon}"/>' for lon, lat in points) + "</trkseg></trk></gpx>"
-        self.path.write_text(raw, encoding="utf-8")
+        (path or self.path).write_text(raw, encoding="utf-8")
 
     def trace(self):
         return {"nom": "test", "chemin_gpx": str(self.path),
                 "empreinte_gpx": hashlib.sha256(self.path.read_bytes()).hexdigest(),
                 "segments": [self.points], "lat_lon_depart": self.points[0][::-1]}
+
+    def traces_at(self, origins):
+        traces = []
+        for index, (x, y) in enumerate(origins):
+            points, path = segment((x, y), (x + 1000, y)), self.root / f"trace{index}.gpx"
+            self._write_gpx(points, path)
+            traces.append({"nom": f"trace{index}", "chemin_gpx": str(path),
+                           "empreinte_gpx": hashlib.sha256(path.read_bytes()).hexdigest(),
+                           "segments": [points], "lat_lon_depart": points[0][::-1]})
+        return traces
+
+    def test_heavy_batch_is_split_without_blocking_other_batches(self):
+        # La trace lourde, 100 km au sud, est triée en tête : 22 traces, deux lots.
+        traces = self.traces_at([(0, -100000)] + [(2000 * i, 10) for i in range(1, 22)])
+
+        def overpass(query):
+            if ",42." in query:  # cercle de la trace lourde, vers 42,4° de latitude
+                raise LotTropLourd("Overpass : réponse incomplète ; calcul du goudron non effectué.")
+            return response([self.road])
+
+        with patch.object(ClientOverpass, "telecharger", side_effect=overpass):
+            result = ajouter_goudron_osm(traces, dossier_cache=self.root, en_ligne=True)
+        self.assertEqual((result["calcules"], result["erreurs"]), (21, 1))
+        self.assertIn("incomplète", traces[0]["erreur_goudron"])
+        self.assertTrue(all("distance_goudron_m" in trace for trace in traces[1:]))
+
+    def test_service_failure_still_stops_remaining_batches(self):
+        traces = self.traces_at([(2000 * i, 10) for i in range(22)])
+        with patch.object(ClientOverpass, "telecharger",
+                          side_effect=ValueError("Overpass indisponible (HTTP 503).")) as download:
+            result = ajouter_goudron_osm(traces, dossier_cache=self.root, en_ligne=True)
+        download.assert_called_once()
+        self.assertEqual(result["erreurs"], 22)
 
     def test_cached_measure_parameter_recalculation_and_changed_source(self):
         with patch.object(ClientOverpass, "telecharger", return_value=response([self.road])) as download:
@@ -185,7 +218,7 @@ class CacheTests(unittest.TestCase):
         with patch("goudron_osm.urlopen") as opener:
             opener.return_value.__enter__.return_value.read.return_value = json.dumps({
                 "elements": [], "remark": "runtime error: Query timed out"}).encode("utf-8")
-            with self.assertRaisesRegex(ValueError, "incomplète"):
+            with self.assertRaisesRegex(LotTropLourd, "incomplète"):
                 ClientOverpass().telecharger("query")
 
     def test_overpass_waits_and_retries_after_rate_limit(self):

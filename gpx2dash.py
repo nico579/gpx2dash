@@ -54,18 +54,23 @@ def _calc_duree(gpx):
     # Temps en mouvement (pauses exclues) ; repli sur le temps écoulé
     # premier -> dernier point si les données de vitesse sont inexploitables.
     duree_s = None
+    # L'altitude GPS bruitée ne doit pas gonfler les vitesses (distance 3D) :
+    # elle est effacée le temps du calcul, puis restaurée. Pas de gpx.clone(),
+    # dont la copie profonde prenait près de la moitié d'une exécution en cache.
+    points = [point for track in gpx.tracks for segment in track.segments
+              for point in segment.points]
+    altitudes = [point.elevation for point in points]
     try:
-        # L'altitude GPS bruitée ne doit pas gonfler les vitesses (distance 3D).
-        copie = gpx.clone()
-        for track in copie.tracks:
-            for segment in track.segments:
-                for point in segment.points:
-                    point.elevation = None
-        mouvement = copie.get_moving_data()
+        for point in points:
+            point.elevation = None
+        mouvement = gpx.get_moving_data()
         if mouvement is not None and mouvement.moving_time:
             duree_s = mouvement.moving_time
     except Exception:
         pass
+    finally:
+        for point, altitude in zip(points, altitudes):
+            point.elevation = altitude
     if duree_s is None:
         bornes = gpx.get_time_bounds()
         if bornes.start_time is not None and bornes.end_time is not None:
@@ -85,7 +90,9 @@ def extraire_et_reduire(args):
     identite = {'nom': nom_trace, 'chemin_gpx': str(Path(chemin_fichier).resolve()),
                 'date': date_du_nom(nom_trace)}
     dossier_cache = Path(options.get("dossier_cache") or Path(chemin_fichier).parent / DOSSIER_CACHE)
-    nom_cache = f"{nom_trace}_tol{tolerance_m}_{VERSION_CACHE}.json"
+    # :g, car argparse laisse le défaut entier (10) mais lit --tolerance 10
+    # comme 10.0 : les deux doivent désigner le même fichier de cache.
+    nom_cache = f"{nom_trace}_tol{tolerance_m:g}_{VERSION_CACHE}.json"
     fichier_cache = dossier_cache / nom_cache
     candidats = [fichier_cache]
     if options.get("cache_source"):

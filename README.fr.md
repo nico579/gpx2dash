@@ -340,7 +340,9 @@ ensuite hors connexion, sans serveur local.
 
 Les voies sont obtenues par le service public **Overpass**, sans clé ni
 facturation, par lots de traces proches et au moins trois secondes entre
-les requêtes. Un autre service peut être choisi avec **--overpass-server**.
+les requêtes. Un lot trop lourd pour le serveur (délai ou taille dépassés)
+est coupé en deux jusqu'à isoler la trace en cause : les autres traces
+restent mesurées. Un autre service peut être choisi avec **--overpass-server**.
 Ces distances restent des estimations : une route non renseignée, une erreur
 GPS, une voie parallèle ou une superposition de pont peuvent changer
 l'interprétation. Voir [la description OSM du revêtement](https://wiki.openstreetmap.org/wiki/Key:surface).

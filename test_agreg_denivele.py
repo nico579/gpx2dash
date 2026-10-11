@@ -91,6 +91,25 @@ class ElevationTests(unittest.TestCase):
         agreg._calc_duree(gpx)
         self.assertEqual(gpx.to_xml(), before)
 
+    def test_elevation_noise_while_stopped_is_not_moving_time(self):
+        # 10 min à 6 km/h, puis 10 min d'arrêt où l'altitude GPS oscille de 20 m.
+        points = ([(5 + i * .00127, 100) for i in range(11)] +
+                  [(5 + 10 * .00127, 100 + 20 * (i % 2)) for i in range(1, 11)])
+        body = ''.join(f'<trkpt lat="45" lon="{lon}"><ele>{z}</ele><time>2026-01-01T10:{i:02d}:00Z</time></trkpt>'
+                       for i, (lon, z) in enumerate(points))
+        gpx = gpxpy.parse(f'<gpx version="1.1" creator="test"><trk><trkseg>{body}</trkseg></trk></gpx>')
+        before = gpx.to_xml()
+        self.assertEqual(agreg._calc_duree(gpx), 600)
+        self.assertEqual(gpx.to_xml(), before)
+
+    def test_cache_name_same_for_default_and_typed_tolerance(self):
+        # argparse garde le défaut entier (10) mais lit « --tolerance 10 » comme 10.0.
+        path = self.directory / 'tolerance.gpx'
+        path.write_bytes(fixture())
+        with patch.object(agreg, 'calculer_denivele', return_value={}):
+            noms = {Path(agreg.extraire_et_reduire((str(path), t))['chemin_cache']).name for t in (10, 10.0)}
+        self.assertEqual(noms, {f'tolerance_tol10_{agreg.VERSION_CACHE}.json'})
+
     def test_windows_worker_and_changed_input(self):
         path = self.directory / 'worker.gpx'
         raw = fixture()
