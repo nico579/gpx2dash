@@ -4,8 +4,6 @@ import argparse
 import multiprocessing
 import sys
 from version import VERSION
-import zlib
-import colorsys
 import gpxpy
 import simplekml
 from datetime import datetime
@@ -16,6 +14,7 @@ import hashlib
 from collections import Counter
 from pathlib import Path
 
+from couleurs_traces import couleur_kml as couleur_stable
 from denivele_gpx2elev import PROTOCOL, calculer_denivele
 from gpx2elev.providers import atomic_write
 from tableau_bord import date_du_nom, extraire_date, generer_tableau_bord
@@ -50,14 +49,6 @@ def formater_distance(metres):
     if not metres:
         return "0km"
     return f"{metres / 1000:.1f}km"
-
-def couleur_stable(nom):
-    # crc32 et pas hash() : hash() est salé par processus, la couleur
-    # changerait à chaque exécution. Saturation/valeur fixées hautes pour
-    # rester lisible sur fond de carte.
-    teinte = (zlib.crc32(nom.encode('utf-8')) % 360) / 360.0
-    r, g, b = colorsys.hsv_to_rgb(teinte, 0.85, 0.9)
-    return simplekml.Color.rgb(int(r * 255), int(g * 255), int(b * 255))
 
 def _calc_duree(gpx):
     # Temps en mouvement (pauses exclues) ; repli sur le temps écoulé
@@ -264,8 +255,10 @@ def fusionner_gpx_vers_kml_parallele(dossier_entree, fichier_sortie, tolerance_m
     print("D+ estimé (5 m / sigma 20 m / hystérésis 2 m) : " +
           ', '.join(f"{modele} : {nombre}" for modele, nombre in sources.items()))
 
+    kml_enregistre = False
     try:
         kml.save(fichier_sortie)
+        kml_enregistre = True
         print(f"\nSuccès. {traces_ajoutees}/{len(fichiers_gpx)} traces intégrées dans : {fichier_sortie}")
     except Exception as e:
         print(f"Erreur KML : {e}")
@@ -285,7 +278,8 @@ def fusionner_gpx_vers_kml_parallele(dossier_entree, fichier_sortie, tolerance_m
     try:
         generer_tableau_bord(resultats, fichier_html, libelle_origine=libelle_origine,
                              origine_route=origine_route, serveur_osrm=serveur_osrm,
-                             marge_goudron=marge_goudron, angle_goudron=angle_goudron, langue=langue)
+                             marge_goudron=marge_goudron, angle_goudron=angle_goudron, langue=langue,
+                             fichier_kml=fichier_sortie if kml_enregistre else None)
         print(f"Tableau de bord HTML : {fichier_html} ({len(resultats)} traces)")
     except OSError as e:
         print(f"Erreur HTML : {e}")

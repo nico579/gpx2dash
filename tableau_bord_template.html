@@ -27,6 +27,21 @@ h1 { font-size: clamp(28px, 3vw, 42px); line-height: 1.15; letter-spacing: -.04e
 .toolbar { display: flex; justify-content: space-between; align-items: center; padding: 22px; gap: 20px; border-bottom: 1px solid var(--line); }
 h2 { font-size: 17px; margin: 0; font-weight: 650; }
 #visible-count { font-size: 12px; color: var(--muted); font-weight: 400; margin-left: 10px; }
+.catalogue-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+#map-catalogue { border: 1px solid #bcccbc; border-radius: 6px; padding: 10px 12px; background: #fff; color: var(--green); font: inherit; font-size: 13px; cursor: pointer; }
+#map-catalogue:disabled { opacity: .5; cursor: default; }
+#map-catalogue:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+.map-filter { display: flex; align-items: center; gap: 7px; font-size: 12px; }
+.map-filter input { accent-color: var(--green); }
+.map-popup { font: 12px/1.5 system-ui, sans-serif; overflow-wrap: anywhere; }
+.map-popup h3 { margin: 0 0 8px; font-size: 14px; color: var(--ink); }
+.map-popup dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0 0 12px; }
+.map-popup dt { color: var(--muted); }
+.map-popup dd { margin: 0; font-variant-numeric: tabular-nums; }
+.map-popup-actions { display: flex; flex-direction: column; align-items: start; gap: 10px; }
+.map-popup button { border: 1px solid #bcccbc; border-radius: 5px; padding: 7px 9px; font: inherit; color: var(--green); background: #fff; cursor: pointer; }
+.map-popup a { color: var(--green); }
+.map-legend .catalogue-tracks::before { background: linear-gradient(90deg, #e52222, #e5b522, #22b5e5, #9222e5); }
 .search { display: flex; align-items: center; gap: 10px; border: 1px solid #ccd6cb; border-radius: 6px; padding: 9px 12px; width: 340px; }
 .search:focus-within { outline: 2px solid var(--green); outline-offset: 2px; }
 .search svg { color: var(--muted); flex-shrink: 0; }
@@ -89,6 +104,7 @@ footer a { color: inherit; }
  .stat { padding: 17px; }
  .stat-value { font-size: 25px; }
  .toolbar { align-items: start; flex-direction: column; gap: 14px; padding: 18px; }
+ .catalogue-actions { width: 100%; }
  .search { width: 100%; }
  .filter-toolbar { align-items: start; flex-direction: column; padding: 12px 18px; gap: 10px; }
  .notes { grid-template-columns: 1fr; gap: 0; }
@@ -97,7 +113,7 @@ footer a { color: inherit; }
 @media print {
  body { background: #fff; }
  main { padding: 0; max-width: none; }
- .search, .filter-toolbar, #column-filters { display: none; }
+ .catalogue-actions, .filter-toolbar, #column-filters { display: none; }
  .table-scroll { overflow: visible; max-height: none; }
  thead { position: static; }
  .language-control { display: none; }
@@ -203,10 +219,13 @@ footer a { color: inherit; }
 <section class="catalogue" aria-labelledby="catalogue-title">
  <div class="toolbar">
   <h2 id="catalogue-title"><span data-i18n="Toutes les traces">Toutes les traces</span> <span id="visible-count" aria-live="polite">@@NOMBRE@@ trace(s)</span></h2>
+  <div class="catalogue-actions">
+   <button type="button" id="map-catalogue" aria-haspopup="dialog" aria-controls="map-dialog" data-i18n="Carte du KML agrégé">Carte du KML agrégé</button>
   <label class="search">
    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 5 5" stroke="currentColor" stroke-width="1.8"/></svg>
    <input id="search" type="search" aria-label="Rechercher une trace, un lieu ou une date" data-i18n-aria-label="Rechercher une trace, un lieu ou une date" placeholder="Rechercher une trace, un lieu, une date…" data-i18n-placeholder="Rechercher une trace, un lieu, une date…">
   </label>
+  </div>
  </div>
  <div class="filter-toolbar">
   <p class="filter-help" id="filter-help"><span data-i18n-html="filterHelp"><strong>Toutes les conditions se combinent (ET).</strong> « Entre » inclut les bornes.<br>
@@ -254,7 +273,8 @@ footer a { color: inherit; }
   <button type="button" id="map-close" autofocus data-i18n="Fermer">Fermer</button>
  </div>
  <div class="map-tools">
-  <div class="map-legend" aria-label="Légende de la carte" data-i18n-aria-label="Légende de la carte"><span class="road" data-i18n="Trajet routier">Trajet routier</span><span class="gpx" data-i18n="Trace GPX">Trace GPX</span></div>
+  <div class="map-legend" aria-label="Légende de la carte" data-i18n-aria-label="Légende de la carte"><span class="road" data-i18n="Trajet routier">Trajet routier</span><span class="gpx" data-i18n="Trace GPX">Trace GPX</span><span id="map-catalogue-legend" class="catalogue-tracks" hidden data-i18n="Couleurs du KML">Couleurs du KML</span></div>
+  <label id="map-filter-control" class="map-filter" hidden><input type="checkbox" id="map-only-visible"><span data-i18n="Traces filtrées uniquement">Traces filtrées uniquement</span></label>
   <div class="map-zoom">
    <button type="button" id="map-overview" data-i18n="Vue d’ensemble">Vue d’ensemble</button>
    <button type="button" id="map-trace" data-i18n="Zoom sur la trace">Zoom sur la trace</button>
@@ -264,6 +284,7 @@ footer a { color: inherit; }
  <p id="map-status" role="status" aria-live="polite"></p>
  <p id="map-tiles-note" hidden data-i18n="Fond de carte indisponible. Les tracés restent visibles ; vérifiez votre connexion Internet.">Fond de carte indisponible. Les tracés restent visibles ; vérifiez votre connexion Internet.</p>
  <div class="map-links">
+  <a id="map-kml" download hidden data-i18n="Télécharger le KML complet">Télécharger le KML complet</a>
   <a id="map-download" download data-i18n="Télécharger le GPX original">Télécharger le GPX original</a>
   <a id="map-osm" target="_blank" rel="noopener noreferrer" data-i18n="Ouvrir le trajet dans OpenStreetMap ↗">Ouvrir le trajet dans OpenStreetMap ↗</a>
  </div>

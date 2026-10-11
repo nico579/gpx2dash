@@ -181,6 +181,7 @@
   });
   count.textContent = t("{visible} / {total} trace(s)", {visible, total: rows.length});
   empty.hidden = visible !== 0;
+  table.dispatchEvent(new Event("dashboard-filter"));
  }
  function refreshSearch() {
   rows.forEach(row => searchTexts.set(row, normalise(row.textContent)));

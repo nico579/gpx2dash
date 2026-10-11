@@ -182,7 +182,18 @@ class DashboardTests(unittest.TestCase):
                     patch.object(reverse_geocoder, "search", return_value=[{"name": "Test"}]):
                 gpx2dash.fusionner_gpx_vers_kml_parallele(directory, folder / "out.kml", routes_en_ligne=False)
             self.assertTrue((folder / "out.kml").is_file())
-            table = Table((folder / "out.html").read_text(encoding="utf-8"))
+            html = (folder / "out.html").read_text(encoding="utf-8")
+            table = Table(html)
+            start = html.index('type="application/json">') + len('type="application/json">')
+            payload = json.loads(html[start:html.index("</script>", start)])
+            self.assertEqual(payload["kml"], "out.kml")
+            self.assertIn('id="map-catalogue"', html)
+            from xml.etree import ElementTree as ET
+            document = ET.parse(folder / "out.kml")
+            ns = {"k": "http://www.opengis.net/kml/2.2"}
+            kml_color = document.find(".//k:LineStyle/k:color", ns).text
+            html_color = payload["traces"][0]["color"].lstrip("#")
+            self.assertEqual(kml_color, "ff" + html_color[4:6] + html_color[2:4] + html_color[:2])
             self.assertEqual(len(table.rows), 2)
             self.assertTrue(any(link.startswith("https://www.openstreetmap.org/directions?") for link in table.links))
 

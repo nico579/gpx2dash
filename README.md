@@ -14,7 +14,7 @@ for comparing outings and planning how to reach them.**
 ### A KML containing all tracks
 
 All usable GPX files in the folder are collected into **one KML file**,
-which opens in a compatible mapping application. Each GPX file retains
+viewable in the dashboard or a compatible mapping application. Each GPX file retains
 its own track and colour; gaps between recording segments stay separate.
 
 Each track name includes its date or filename, starting place, distance,
@@ -329,6 +329,25 @@ Overpass requests. Choose an endpoint with `--overpass-server URL`.
 These are estimates: missing OSM tags, GPS noise, parallel roads or bridges can
 affect interpretation. See [OSM surfaces](https://wiki.openstreetmap.org/wiki/Key:surface).
 
+## View the aggregated KML in the dashboard
+
+Click **Aggregated KML map**, next to the catalogue search field.
+The map displays every track with **the same colours as the KML**;
+disconnected recording segments stay separate.
+
+Select **Filtered tracks only** to show routes matching the table's search and
+filters. **Overview** fits the displayed tracks. Clicking a track opens its
+details: date, starting place, distance, gain/loss, duration, driving access
+and asphalt alongside. Download the original GPX from the popup, or open
+**the driving route and track**.
+
+**Download complete KML** retrieves the generated file with all its tracks,
+even when the map is filtered. Keep the KML at its generated location for this
+link. Geometry is embedded in the HTML, so the global map works by opening
+the file directly, without a local server. Map tiles require Internet;
+tracks remain visible if tiles fail to load. Opening the global map does not
+calculate any driving routes.
+
 ## Display the driving route and GPX track
 
 Click **Driving route and GPX track** in a row. The dialog shows the one-way
@@ -408,6 +427,7 @@ and hashes. Install with `--require-hashes`.
 .\.venv\Scripts\python.exe -X utf8 tools/smoke_bundle.py
 .\.venv\Scripts\python.exe -X utf8 .qa/verifier_filtres.py --fixtures-only
 .\.venv\Scripts\python.exe -X utf8 .qa/verifier_carte.py
+.\.venv\Scripts\python.exe -X utf8 .qa/verifier_kml.py
 .\.venv\Scripts\python.exe -X utf8 .qa/verifier_langues.py
 ~~~
 
@@ -417,7 +437,8 @@ Developer previews use a loopback server for tests; users open HTML directly.
 
 [CI](.github/workflows/ci.yml) runs Python tests on **Windows, Linux and macOS**.
 Chromium tests cover EN/FR, all column operators, combined conditions, sorting,
-origin changes, map/download/error behavior, and fixed headers with vertical
+origin changes, map/download/error behavior, aggregated KML colours, filters,
+popups and downloads from local files, and fixed headers with vertical
 and horizontal scrolling on desktop and mobile. GitHub runners then build
 bundles and execute each against synthetic GPX and OSM fixtures, checking
 KML/HTML, process workers, native geometry and geocoder data.

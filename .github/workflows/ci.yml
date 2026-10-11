@@ -39,7 +39,7 @@ jobs:
         run: python -m pip install --require-hashes -r requirements-dev.txt
       - name: Lint and syntax
         run: |
-          python -m ruff check gpx2dash.py tableau_bord.py trajets_osrm.py goudron_osm.py denivele_gpx2elev.py version.py build.py tools test_*.py
+          python -m ruff check gpx2dash.py couleurs_traces.py tableau_bord.py trajets_osrm.py goudron_osm.py denivele_gpx2elev.py version.py build.py tools test_*.py
           python -m compileall -q gpx2elev
           node --check tableau_bord.js
           node --check carte_trace.js
@@ -79,6 +79,10 @@ jobs:
         env:
           GPX2DASH_BROWSER: chromium
         run: python -X utf8 .qa/verifier_carte.py
+      - name: Aggregated KML, colours, filters, popups, downloads and file access
+        env:
+          GPX2DASH_BROWSER: chromium
+        run: python -X utf8 .qa/verifier_kml.py
       - name: Languages, persistence, vertical and horizontal scrolling, mobile
         env:
           GPX2DASH_BROWSER: chromium

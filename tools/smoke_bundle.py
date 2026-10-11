@@ -67,6 +67,9 @@ def main():
             start = content.index('type="application/json">') + len('type="application/json">')
             data = json.loads(content[start:content.index("</script>", start)])
             assert data["language"] == language and len(data["traces"]) == 2
+            assert data["kml"] == kml.name
+            assert all(trace["color"].startswith("#") and len(trace["color"]) == 7 for trace in data["traces"])
+            assert 'id="map-catalogue"' in content and 'id="map-only-visible"' in content
             assert 'id="language"' in content and "position: sticky" in content
             assert kml.is_file() and "MultiGeometry" in kml.read_text(encoding="utf-8")
             statistics = [json.loads(p.read_text(encoding="utf-8")) for p in cache.glob("*_v6-gpx2elev.json")]

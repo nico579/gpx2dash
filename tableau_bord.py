@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 from urllib.parse import quote
 
+from couleurs_traces import couleur_html
 from goudron_osm import MARGE_GOUDRON, ANGLE_GOUDRON
 from trajets_osrm import DEPART_GAREOULT, SERVEUR_OSRM, GEOCODEUR, CHAMPS_ROUTE, cle_trajet, coordonnees
 
@@ -127,7 +128,8 @@ def _segments_carte(resultat):
 
 def generer_tableau_bord(resultats, fichier_sortie, *, libelle_origine="Mairie de Garéoult",
                          origine_route=DEPART_GAREOULT, serveur_osrm=SERVEUR_OSRM,
-                         marge_goudron=MARGE_GOUDRON, angle_goudron=ANGLE_GOUDRON, langue=None):
+                         marge_goudron=MARGE_GOUDRON, angle_goudron=ANGLE_GOUDRON, langue=None,
+                         fichier_kml=None):
     """Une ligne par fichier ; recherche, tri et filtres locaux, routage sur demande."""
     if langue not in (None, "en", "fr"):
         raise ValueError("Language must be en or fr.")
@@ -199,13 +201,16 @@ def generer_tableau_bord(resultats, fichier_sortie, *, libelle_origine="Mairie d
             position = coordonnees(res["lat_lon_depart"])
         except (KeyError, TypeError, ValueError):
             continue
-        traces.append({"id": str(res.get("nom", "Trace")), "position": position, "segments": _segments_carte(res)})
+        nom = str(res.get("nom", "Trace"))
+        traces.append({"id": nom, "position": position, "segments": _segments_carte(res),
+                       "color": couleur_html(nom)})
         if res.get("date_route"):
             cache[cle_trajet(position, origine_route, serveur_osrm)] = {
                 cle: res[cle] for cle in CHAMPS_ROUTE if cle in res
             }
     donnees = json.dumps({
         "language": langue, "asphaltTolerance": marge_goudron, "asphaltAngle": angle_goudron,
+        "kml": _lien_fichier(fichier_kml, sortie.parent) if fichier_kml else None,
         "totalDistance": total_distance, "totalAscent": total_denivele, "errors": erreurs,
         "generated": datetime.now().astimezone().isoformat(),
         "origine": {"libelle": libelle_origine, "position": coordonnees(origine_route)},

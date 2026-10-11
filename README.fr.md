@@ -14,7 +14,8 @@ HTML pour comparer les sorties et préparer leur accès.**
 ### Un KML regroupant les traces
 
 Tous les GPX exploitables du dossier sont réunis dans **un seul fichier KML**,
-ouvrable dans une application cartographique compatible. Chaque fichier GPX
+visualisable dans le tableau de bord ou dans une application cartographique
+compatible. Chaque fichier GPX
 conserve sa propre trace et sa couleur ; les interruptions d'enregistrement
 restent séparées.
 
@@ -344,6 +345,25 @@ Ces distances restent des estimations : une route non renseignée, une erreur
 GPS, une voie parallèle ou une superposition de pont peuvent changer
 l'interprétation. Voir [la description OSM du revêtement](https://wiki.openstreetmap.org/wiki/Key:surface).
 
+## Voir le KML agrégé dans le tableau
+
+Cliquer sur **Carte du KML agrégé**, à côté de la recherche du catalogue.
+La carte affiche tous les parcours avec **les mêmes couleurs que le KML** ;
+les segments discontinus restent séparés.
+
+Cocher **Traces filtrées uniquement** pour afficher les parcours qui satisfont
+la recherche et les filtres du tableau. **Vue d'ensemble** recadre les traces
+affichées. Un clic sur une trace ouvre sa fiche : date, lieu, distance,
+dénivelé, durée, accès routier et goudron longé. La fiche permet de télécharger
+le GPX original ou d'ouvrir **l'itinéraire routier et la trace**.
+
+**Télécharger le KML complet** récupère le fichier généré, avec toutes ses traces,
+même si la carte est filtrée. Conserver le KML à l'emplacement prévu pour ce lien.
+Les géométries sont intégrées dans le HTML : la carte globale fonctionne en
+ouverture directe, sans serveur local. Le fond de carte nécessite Internet ;
+les tracés restent visibles si le fond ne se charge pas. L'ouverture de la carte
+globale ne calcule aucun itinéraire routier.
+
 ## Voir l'itinéraire routier et la trace GPX
 
 Cliquer sur **Itinéraire et trace GPX** dans la ligne d'une trace. La carte
@@ -496,6 +516,7 @@ Contrôles hors réseau :
 
 La CI teste les calculs, les caches et le rendu sur **Windows, Linux et macOS**.
 Elle vérifie avec Chromium l'interface EN/FR, les filtres combinés, le routage,
+le KML agrégé (couleurs, filtres, fiches et téléchargements en ouverture directe),
 la carte et les en-têtes fixes sur ordinateur et mobile. Elle construit ensuite
 les trois bundles et exécute chacun sur des GPX et des voies OSM synthétiques :
 génération KML/HTML, processus parallèles, géocodeur et calcul natif du goudron.
@@ -510,6 +531,7 @@ Pour les contrôles navigateur locaux :
 .\.venv\Scripts\python.exe -m pip install --require-hashes -r requirements-dev.txt
 .\.venv\Scripts\python.exe -X utf8 .qa/verifier_filtres.py --fixtures-only
 .\.venv\Scripts\python.exe -X utf8 .qa/verifier_carte.py
+.\.venv\Scripts\python.exe -X utf8 .qa/verifier_kml.py
 .\.venv\Scripts\python.exe -X utf8 .qa/verifier_langues.py
 ~~~
 

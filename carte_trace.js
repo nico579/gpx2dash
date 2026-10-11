@@ -7,7 +7,12 @@ function initialiserCarteTraces(options) {
  const dialog = document.getElementById("map-dialog"), container = document.getElementById("trace-map");
  const status = document.getElementById("map-status"), overviewButton = document.getElementById("map-overview");
  const traceButton = document.getElementById("map-trace"), geometryCache = new Map();
- let map = null, traceLayer = null, roadLayer = null, markers = null, active = null, controller = null;
+ const catalogueButton = document.getElementById("map-catalogue");
+ const onlyVisible = document.getElementById("map-only-visible");
+ const rowById = new Map(Array.from(table.tBodies[0].rows, row => [row.dataset.id, row]));
+ const mappedTraces = Array.from(traces.values()).filter(trace => trace.segments.length && rowById.has(trace.id));
+ let map = null, traceLayer = null, roadLayer = null, catalogueLayer = null, markers = null, active = null, controller = null;
+ let displayedIds = null;
  let bodyOverflow = "";
  const tilesNote = document.getElementById("map-tiles-note"), failedTiles = new Set();
  function noteTiles() { tilesNote.hidden = failedTiles.size === 0; }
@@ -18,6 +23,11 @@ function initialiserCarteTraces(options) {
   if (traceLayer) map.fitBounds(traceLayer.getBounds(), {padding: [28, 28], maxZoom: 16, animate: false});
  }
  function fitAll() {
+  if (active?.mode === "catalogue") {
+   const bounds = catalogueLayer && catalogueLayer.getBounds();
+   if (bounds && bounds.isValid()) map.fitBounds(bounds, {padding: [28, 28], maxZoom: 16, animate: false});
+   return;
+  }
   if (!traceLayer || !active) return;
   const bounds = traceLayer.getBounds().extend(active.city.position);
   if (roadLayer) bounds.extend(roadLayer.getBounds());
@@ -38,11 +48,42 @@ function initialiserCarteTraces(options) {
   L.control.scale({imperial: false}).addTo(map);
   new ResizeObserver(() => { if (dialog.open) map.invalidateSize({pan: false}); }).observe(container);
  }
+ function showDialog() {
+  if (!dialog.open) {
+   bodyOverflow = document.body.style.overflow;
+   dialog.showModal(); document.body.style.overflow = "hidden";
+  }
+  ensureMap();
+  map.zoomControl.setPosition(active?.mode === "catalogue" ? "bottomright" : "topleft");
+  map.invalidateSize({pan: false});
+ }
+ function clearLayers() {
+  for (const layer of [traceLayer, roadLayer, catalogueLayer]) if (layer) layer.remove();
+  traceLayer = roadLayer = catalogueLayer = null;
+  displayedIds = null;
+  markers.clearLayers();
+ }
+ function setMode(mode) {
+  const catalogue = mode === "catalogue";
+  container.dataset.mode = mode;
+  traceButton.hidden = catalogue;
+  document.getElementById("map-filter-control").hidden = !catalogue;
+  document.querySelectorAll(".map-legend .road, .map-legend .gpx").forEach(el => el.hidden = catalogue);
+  document.getElementById("map-catalogue-legend").hidden = !catalogue;
+  document.getElementById("map-osm").hidden = catalogue;
+  const kml = document.getElementById("map-kml");
+  kml.hidden = !catalogue || !data.kml;
+  if (data.kml) kml.href = data.kml;
+  const label = catalogue ? "Carte interactive des traces du KML agrégé" : "Carte interactive du trajet routier et de la trace GPX";
+  container.setAttribute("data-i18n-aria-label", label);
+  container.setAttribute("aria-label", t(label));
+ }
  function finishClose() {
   // A queued close event from the previous opening must not cancel a newly opened map.
   if (dialog.open) return;
   if (controller) controller.abort();
   controller = null; active = null;
+  if (map) map.closePopup();
   document.body.style.overflow = bodyOverflow;
  }
  function close() { if (dialog.open) dialog.close(); finishClose(); }
@@ -56,6 +97,109 @@ function initialiserCarteTraces(options) {
  });
  traceButton.addEventListener("click", fitTrace);
  overviewButton.addEventListener("click", fitAll);
+ function popupContent(trace) {
+  const row = rowById.get(trace.id), popup = document.createElement("div");
+  popup.className = "map-popup";
+  const title = document.createElement("h3"); title.textContent = trace.id; popup.appendChild(title);
+  const stats = document.createElement("dl");
+  for (const [index, label] of [[0, "Date"], [1, "Lieu de départ"], [2, "Distance de la trace"],
+   [3, "Dénivelé D+ / D−"], [4, "Durée de la trace"], [5, "Distance de route"],
+   [6, "Durée de route"], [7, "Goudron longé (OSM)"]]) {
+   const term = document.createElement("dt"), value = document.createElement("dd");
+   term.textContent = t(label);
+   const cell = row.cells[index];
+   value.textContent = index === 0 ? cell.querySelector(".date").textContent :
+    index === 1 ? cell.firstChild.textContent :
+    Array.from(cell.childNodes, node => node.textContent.trim()).filter(Boolean).join(" · ");
+   stats.append(term, value);
+  }
+  popup.appendChild(stats);
+  const origin = document.createElement("p");
+  origin.textContent = t("Trajet aller depuis {city}", {city: getOrigin().libelle}); popup.appendChild(origin);
+  const actions = document.createElement("div"); actions.className = "map-popup-actions";
+  const original = row.querySelector(".trace-name a[download]");
+  if (original) {
+   const download = original.cloneNode(false);
+   download.textContent = t("Télécharger le GPX original"); actions.appendChild(download);
+  }
+  const link = row.querySelector(".route-link");
+  if (link) {
+   const button = document.createElement("button"); button.type = "button";
+   button.textContent = t("Voir l’itinéraire et la trace");
+   button.addEventListener("click", () => open(trace, row, link).catch(mapError));
+   actions.appendChild(button);
+  }
+  popup.appendChild(actions);
+  return popup;
+ }
+ function catalogueStatus(n) {
+  message(status, n ? "{n} / {total} trace(s) affichée(s). Cliquez sur une trace pour voir ses informations." :
+   "Aucune trace géolocalisée ne correspond aux filtres.", {n, total: mappedTraces.length});
+ }
+ function refreshCatalogue(fit = false) {
+  if (active?.mode !== "catalogue") return;
+  const selected = mappedTraces.filter(trace => !onlyVisible.checked || !rowById.get(trace.id).hidden);
+  const ids = JSON.stringify(selected.map(trace => trace.id));
+  catalogueStatus(selected.length);
+  container.dataset.catalogueCount = String(selected.length);
+  if (ids !== displayedIds) {
+   if (catalogueLayer) catalogueLayer.remove();
+   displayedIds = ids;
+   catalogueLayer = L.geoJSON({type: "FeatureCollection", features: selected.map(trace => ({
+    type: "Feature", properties: {id: trace.id, color: trace.color},
+    geometry: {type: "MultiLineString", coordinates: trace.segments}
+   }))}, {
+    style: feature => ({color: feature.properties.color, weight: 3, opacity: .9, pane: "gpx", className: "catalogue-path"}),
+    onEachFeature: (feature, layer) => {
+     const trace = traces.get(feature.properties.id);
+     layer.bindTooltip(() => textNode(trace.id));
+     layer.bindPopup(() => popupContent(trace), {maxWidth: 330, minWidth: 230});
+     layer.on("add", () => {
+      const element = layer.getElement();
+      element.dataset.traceId = trace.id;
+      element.setAttribute("tabindex", "0");
+      element.setAttribute("role", "button");
+      element.setAttribute("aria-label", t("Détails de la trace : {name}", {name: trace.id}));
+      element.addEventListener("keydown", event => {
+       if (event.key === "Enter" || event.key === " ") { event.preventDefault(); layer.openPopup(); }
+      });
+     });
+     layer.on("popupopen", () => layer.setStyle({weight: 5}));
+     layer.on("popupclose", () => layer.setStyle({weight: 3}));
+    }
+   }).addTo(map);
+  } else {
+   catalogueLayer.eachLayer(layer => {
+    layer.getElement().setAttribute("aria-label", t("Détails de la trace : {name}", {name: layer.feature.properties.id}));
+    if (layer.isPopupOpen()) layer.getPopup().setContent(popupContent(traces.get(layer.feature.properties.id)));
+   });
+  }
+  if (fit) fitAll();
+ }
+ function openCatalogue() {
+  if (controller) controller.abort();
+  controller = null;
+  active = {mode: "catalogue"};
+  const title = document.getElementById("map-title");
+  title.dataset.i18n = "KML agrégé"; title.textContent = t("KML agrégé");
+  message(document.getElementById("map-origin"), "Parcours regroupés dans le KML");
+  document.getElementById("map-download").hidden = true;
+  setMode("catalogue");
+  showDialog(); clearLayers();
+  delete container.dataset.traceId; delete container.dataset.origin;
+  container.dataset.road = "none";
+  noteTiles();
+  refreshCatalogue(true);
+ }
+ function mapError(error) {
+  message(status, "Carte indisponible : {error}", {error: error.message});
+  container.dataset.road = "unavailable";
+ }
+ catalogueButton.disabled = mappedTraces.length === 0;
+ catalogueButton.addEventListener("click", () => { try { openCatalogue(); } catch (error) { mapError(error); } });
+ onlyVisible.addEventListener("change", () => refreshCatalogue(true));
+ table.addEventListener("dashboard-filter", () => refreshCatalogue());
+ document.addEventListener("dashboard-language", () => refreshCatalogue());
  async function geometry(trace, city, signal) {
   const cacheKey = key(trace.position, city.position);
   if (geometryCache.has(cacheKey)) return geometryCache.get(cacheKey);
@@ -80,7 +224,8 @@ function initialiserCarteTraces(options) {
   if (controller) controller.abort();
   controller = new AbortController();
   const signal = controller.signal, city = getOrigin();
-  active = {trace, city};
+  active = {mode: "trace", trace, city};
+  setMode("trace");
   document.getElementById("map-title").removeAttribute("data-i18n");
   document.getElementById("map-title").textContent = trace.id;
   message(document.getElementById("map-origin"), "Trajet aller depuis {city}", {city: city.libelle});
@@ -91,14 +236,7 @@ function initialiserCarteTraces(options) {
   message(status, "Trace GPX affichée. Chargement de l’itinéraire routier…");
   tilesNote.hidden = true;
   noteTiles();
-  if (!dialog.open) {
-   bodyOverflow = document.body.style.overflow;
-   dialog.showModal(); document.body.style.overflow = "hidden";
-  }
-  ensureMap();
-  if (traceLayer) traceLayer.remove();
-  if (roadLayer) { roadLayer.remove(); roadLayer = null; }
-  markers.clearLayers();
+  showDialog(); clearLayers();
   traceLayer = L.geoJSON({type: "MultiLineString", coordinates: trace.segments}, {
    style: {color: "#c54f36", weight: 4, opacity: 1, pane: "gpx", className: "gpx-path"}
   }).addTo(map);
@@ -132,9 +270,6 @@ function initialiserCarteTraces(options) {
   const row = link.closest("tr"), trace = traces.get(row.dataset.id);
   if (!trace || !trace.segments.length) return;
   event.preventDefault();
-  open(trace, row, link).catch(error => {
-   message(status, "Carte indisponible : {error}", {error: error.message});
-   container.dataset.road = "unavailable";
-  });
+  open(trace, row, link).catch(mapError);
  });
 }
