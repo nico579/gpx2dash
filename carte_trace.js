@@ -89,6 +89,7 @@ function initialiserCarteTraces(options) {
  function close() { if (dialog.open) dialog.close(); finishClose(); }
  document.getElementById("map-close").addEventListener("click", close);
  dialog.addEventListener("close", finishClose);
+ dialog.addEventListener("cancel", event => { event.preventDefault(); close(); });
  dialog.addEventListener("click", event => {
   if (event.target !== dialog) return;
   const bounds = dialog.getBoundingClientRect();
