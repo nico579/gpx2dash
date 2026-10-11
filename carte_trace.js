@@ -38,13 +38,16 @@ function initialiserCarteTraces(options) {
   L.control.scale({imperial: false}).addTo(map);
   new ResizeObserver(() => { if (dialog.open) map.invalidateSize({pan: false}); }).observe(container);
  }
- function close() { if (dialog.open) dialog.close(); }
- document.getElementById("map-close").addEventListener("click", close);
- dialog.addEventListener("close", () => {
+ function finishClose() {
+  // A queued close event from the previous opening must not cancel a newly opened map.
+  if (dialog.open) return;
   if (controller) controller.abort();
   controller = null; active = null;
   document.body.style.overflow = bodyOverflow;
- });
+ }
+ function close() { if (dialog.open) dialog.close(); finishClose(); }
+ document.getElementById("map-close").addEventListener("click", close);
+ dialog.addEventListener("close", finishClose);
  dialog.addEventListener("click", event => {
   if (event.target !== dialog) return;
   const bounds = dialog.getBoundingClientRect();

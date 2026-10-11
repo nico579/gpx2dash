@@ -10,6 +10,8 @@ def main():
     parser.add_argument("--format", choices=("zip", "gztar"), required=True)
     args = parser.parse_args()
     base = Path("dist")
+    for name in ("README.md", "README.fr.md"):
+        shutil.copyfile(Path(__file__).resolve().parent.parent / name, base / "gpx2dash" / name)
     archive = Path(shutil.make_archive(str(base / args.asset), args.format, root_dir=base, base_dir="gpx2dash"))
     archive.with_name(archive.name + ".sha256").write_text(
         hashlib.sha256(archive.read_bytes()).hexdigest() + "  " + archive.name + "\n", encoding="ascii")

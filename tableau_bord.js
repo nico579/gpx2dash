@@ -424,6 +424,9 @@
    message(status, "Dernier départ restauré : {city}. Résultats repris du cache.", {city: saved.libelle});
   }
  }
+ function cellDistance(cell) {
+  return cell.dataset.filter === "" ? "—" : Number(cell.dataset.filter).toFixed(1).replace(".", dashboardI18n.language === "fr" ? "," : ".") + " km";
+ }
  function renderLanguage() {
   filterControls.forEach(updateFilterInputs);
   rows.forEach(row => {
@@ -431,10 +434,10 @@
    if (date) date.textContent = cells[0].dataset.sort ? new Date(cells[0].dataset.sort + "T12:00:00").toLocaleDateString(dashboardI18n.locale) : t("Date inconnue");
    for (const index of [2, 4, 5, 6]) {
     const value = cells[index].dataset.sort === "" ? null : Number(cells[index].dataset.sort);
-    cells[index].textContent = index === 2 || index === 5 ? distance(value) : duration(value);
+    cells[index].textContent = index === 2 || index === 5 ? cellDistance(cells[index]) : duration(value);
    }
    const value = cells[7].dataset.sort === "" ? null : Number(cells[7].dataset.sort), uncertain = Number(row.dataset.uncertain || 0);
-   cells[7].textContent = (uncertain && value !== null ? "≥ " : "") + distance(value);
+   cells[7].textContent = (uncertain && value !== null ? "≥ " : "") + cellDistance(cells[7]);
    if (uncertain) {
     const detail = document.createElement("span"); detail.className = "detail";
     detail.textContent = t("{km} incertains", {km: distance(uncertain)}); cells[7].appendChild(detail);
