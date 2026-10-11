@@ -14,7 +14,11 @@ Driving routes use **OSRM / OpenStreetMap**, and town search uses **Photon**.
 No API key or billing account is required. Open the generated HTML by
 double-clicking it: no web server is needed.
 
-## Standalone bundle — no Python required
+Choose **one installation method**. The standalone bundle is recommended
+for normal use. Running the Python source is an alternative if you want to
+work with the code. **You do not need to run both commands.**
+
+## Option 1: standalone bundle (recommended)
 
 Download from [GitHub Releases](https://github.com/nico579/gpx2dash/releases):
 
@@ -31,14 +35,19 @@ Open a terminal in that folder and run:
 .\gpx2dash.exe "C:\path\to\gpx" --from-cache --asphalt --html dashboard.html --kml tracks.kml --language en
 ~~~
 
-On Linux/macOS use `./gpx2dash`. Pass the GPX folder in the terminal, then
-double-click **dashboard.html**. The bundles include Python and dependencies.
+Replace `C:\path\to\gpx` with the actual path to your GPX folder, then
+double-click **dashboard.html** after the command finishes. On Linux/macOS
+use `./gpx2dash`. The bundles include Python and dependencies, so no Python
+installation is required. You can now skip the source installation section
+and continue with [usage examples](#usage-examples).
+
 They are **built and tested on native GitHub runners**, using locked
 dependencies. Release assets include SHA-256 checksums and `SHA256SUMS.txt`.
 
-## Install from source
+## Option 2: run from source
 
-Python **3.12** and Git are required. The elevation engine is included:
+Choose this method **instead of the bundle** to run or modify the Python
+code. Python **3.12** and Git are required. The elevation engine is included:
 no sibling project, Conda or Qt installation is needed.
 
 Windows / PowerShell:
@@ -48,7 +57,7 @@ git clone https://github.com/nico579/gpx2dash.git
 cd gpx2dash
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --require-hashes -r requirements.txt
-.\.venv\Scripts\python.exe -X utf8 gpx2dash.py "..\gpx" --from-cache --asphalt --html dashboard.html --kml tracks.kml
+.\.venv\Scripts\python.exe -X utf8 gpx2dash.py "C:\path\to\gpx" --from-cache --asphalt --html dashboard.html --kml tracks.kml --language en
 ~~~
 
 Linux/macOS:
@@ -58,14 +67,16 @@ git clone https://github.com/nico579/gpx2dash.git
 cd gpx2dash
 python3.12 -m venv .venv
 .venv/bin/python -m pip install --require-hashes -r requirements.txt
-.venv/bin/python gpx2dash.py ../gpx --from-cache --asphalt --html dashboard.html --kml tracks.kml
+.venv/bin/python gpx2dash.py "/path/to/gpx" --from-cache --asphalt --html dashboard.html --kml tracks.kml --language en
 ~~~
 
-Replace `../gpx` with your folder. With no positional argument, the program
+Replace the example path with your GPX folder. This source command produces
+the same dashboard and KML as the bundle command. With no positional
+argument, the program
 uses the sibling `gpx` folder if present, otherwise the current directory.
 Both `.gpx` and `.GPX` are accepted. Default output names are timestamped.
 
-For a **fully offline demonstration**, using the synthetic example:
+With the sources, try a **fully offline demonstration** using the synthetic example:
 
 ~~~powershell
 .\.venv\Scripts\python.exe -X utf8 gpx2dash.py examples --from-cache --no-routing --html demonstration.html --kml demonstration.kml
@@ -74,6 +85,22 @@ For a **fully offline demonstration**, using the synthetic example:
 Double-click **demonstration.html**. Routing and asphalt remain unknown until
 data is downloaded. Personal GPX files, caches, screenshots and generated
 HTML/KML files are excluded by `.gitignore`.
+
+## Usage examples
+
+The examples below use the **Windows bundle in PowerShell**. For a different
+installation, replace only the command prefix:
+
+| Installation | Command prefix |
+|---|---|
+| Windows bundle | `.\gpx2dash.exe` |
+| Windows sources | `.\.venv\Scripts\python.exe -X utf8 gpx2dash.py` |
+| Linux/macOS bundle | `./gpx2dash` |
+| Linux/macOS sources | `.venv/bin/python gpx2dash.py` |
+
+Keep the same parameters and replace `C:\path\to\gpx` with your GPX folder
+(use a path appropriate to your system). Each example is a separate operation,
+not a sequence of required steps.
 
 ## English / French and fixed headers
 
@@ -108,14 +135,14 @@ These switches are independent:
 | Parameter | Effect |
 |---|---|
 | `--from-cache` | Reuse verified statistics / local elevation data; no elevation downloads |
-| `--no-routing` | Use routing cache only; no OSRM requests from Python |
+| `--no-routing` | Use routing cache only; no OSRM requests during generation |
 | `--asphalt` | Download missing nearby OSM road surfaces with Overpass |
 | no `--asphalt` | Reuse local asphalt measurements or road snapshots only |
 
 To regenerate entirely from local data:
 
 ~~~powershell
-python gpx2dash.py "../gpx" --from-cache --no-routing --html dashboard.html --kml tracks.kml
+.\gpx2dash.exe "C:\path\to\gpx" --from-cache --no-routing --html dashboard.html --kml tracks.kml
 ~~~
 
 Source caches default to `.cache_gpx` in the project folder. Bundles use
@@ -135,11 +162,16 @@ browser. On cancellation or service failure, displayed values retain their
 previous origin; completed batches remain cached for resuming.
 
 The default origin is Garéoult town hall, France (43.3293, 6.0458).
-Set another initial town or exact coordinates when generating:
+Set another initial town when generating:
 
 ~~~powershell
-python gpx2dash.py ../gpx --from-cache --origin-city "Toulon, Var, France" --html dashboard.html
-python gpx2dash.py ../gpx --from-cache --origin 43.1242 5.9280 --origin-name "My Toulon start"
+.\gpx2dash.exe "C:\path\to\gpx" --from-cache --origin-city "Toulon, Var, France" --html dashboard.html
+~~~
+
+Or use exact coordinates:
+
+~~~powershell
+.\gpx2dash.exe "C:\path\to\gpx" --from-cache --origin 43.1242 5.9280 --origin-name "My Toulon start"
 ~~~
 
 The command line uses the first Photon result and prints its label.
@@ -169,7 +201,7 @@ and reported beside the filter. **Clear filters** also clears free-text search.
 Use **`--asphalt`** for the first download:
 
 ~~~powershell
-python gpx2dash.py ../gpx --from-cache --no-routing --asphalt --html dashboard.html
+.\gpx2dash.exe "C:\path\to\gpx" --from-cache --no-routing --asphalt --html dashboard.html
 ~~~
 
 Measurement uses the **original GPX**, before simplification. A portion counts
@@ -194,7 +226,7 @@ the server's requested delay.
 Change tolerances with:
 
 ~~~powershell
-python gpx2dash.py ../gpx --from-cache --no-routing --asphalt --asphalt-tolerance 20 --asphalt-angle 30 --html dashboard.html
+.\gpx2dash.exe "C:\path\to\gpx" --from-cache --no-routing --asphalt --asphalt-tolerance 20 --asphalt-angle 30 --html dashboard.html
 ~~~
 
 Distance tolerance accepts 1–50 m; angle accepts 1–60°. Measurements and road
@@ -246,7 +278,7 @@ For heavier use, configure your own
 [OSRM server](https://github.com/Project-OSRM/osrm-backend):
 
 ~~~powershell
-python gpx2dash.py ../gpx --osrm-server "http://localhost:5000"
+.\gpx2dash.exe "C:\path\to\gpx" --osrm-server "http://localhost:5000"
 ~~~
 
 It must expose the driving profile, distance/duration matrices and browser CORS.
@@ -270,23 +302,26 @@ Geometry uses NumPy, native PyProj transforms and Shapely's spatial index.
 Roads are prepared once per batch and selection is vectorized.
 Conda is unnecessary; Numba JIT is not currently used.
 
-## Tests, CI and releases
+## Development: tests, CI and releases
+
+These commands are for contributors using the **source installation**,
+from the cloned project folder. They are not needed to use a bundle.
 
 `requirements.in` pins direct dependencies. `requirements.txt`,
 `requirements-build.txt` and `requirements-dev.txt` lock transitive dependencies
 and hashes. Install with `--require-hashes`.
 
 ~~~powershell
-python -m pip install --require-hashes -r requirements-dev.txt
-python -X utf8 -m unittest discover -v
-python -X utf8 tools/smoke_bundle.py
-python .qa/verifier_filtres.py --fixtures-only
-python .qa/verifier_carte.py
-python .qa/verifier_langues.py
+.\.venv\Scripts\python.exe -m pip install --require-hashes -r requirements-dev.txt
+.\.venv\Scripts\python.exe -X utf8 -m unittest discover -v
+.\.venv\Scripts\python.exe -X utf8 tools/smoke_bundle.py
+.\.venv\Scripts\python.exe -X utf8 .qa/verifier_filtres.py --fixtures-only
+.\.venv\Scripts\python.exe -X utf8 .qa/verifier_carte.py
+.\.venv\Scripts\python.exe -X utf8 .qa/verifier_langues.py
 ~~~
 
 Local browser checks use Microsoft Edge. Set `GPX2DASH_BROWSER=chromium` and
-run `python -m playwright install chromium` to use Chromium, as CI does.
+run `.\.venv\Scripts\python.exe -m playwright install chromium` to use Chromium, as CI does.
 Developer previews use a loopback server for tests; users open HTML directly.
 
 [CI](.github/workflows/ci.yml) runs Python tests on **Windows, Linux and macOS**.

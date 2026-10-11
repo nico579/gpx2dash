@@ -5,8 +5,6 @@
 [![CI](https://github.com/nico579/gpx2dash/actions/workflows/ci.yml/badge.svg)](https://github.com/nico579/gpx2dash/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/nico579/gpx2dash)](https://github.com/nico579/gpx2dash/releases/latest)
 
-
-
 Le script produit un KML et un tableau HTML autonome avec une ligne par fichier
 GPX et huit colonnes triables : date, lieu de départ de la trace, distance,
 dénivelé D+/D−, durée de la trace, distance de route, durée de route et
@@ -15,7 +13,11 @@ dénivelé D+/D−, durée de la trace, distance de route, durée de route et
 Les trajets utilisent **OSRM et OpenStreetMap**, sans clé ni compte de facturation.
 La recherche de villes utilise le géocodeur open source **Photon**.
 
-## Bundle autonome — sans Python
+Choisir **une seule méthode d'installation**. Le bundle autonome est recommandé
+pour utiliser l'application. L'exécution des sources Python est une alternative
+pour travailler sur le code. **Il ne faut pas lancer les deux commandes.**
+
+## Option 1 : bundle autonome (recommandé)
 
 Les [releases GitHub](https://github.com/nico579/gpx2dash/releases) proposent :
 
@@ -32,11 +34,87 @@ Dans un terminal ouvert dans ce dossier :
 .\gpx2dash.exe "C:\chemin\vers\gpx" --from-cache --asphalt --html tableau_bord.html --kml traces.kml --language fr
 ~~~
 
-Sous Linux/macOS, utiliser `./gpx2dash`. Indiquer le dossier GPX dans le terminal,
-puis ouvrir le HTML par double-clic. Python n'est pas requis pour le bundle.
+Remplacer `C:\chemin\vers\gpx` par le chemin réel de ton dossier GPX, puis
+ouvrir **tableau_bord.html** par double-clic une fois la commande terminée.
+Sous Linux/macOS, utiliser `./gpx2dash`. Le bundle contient Python et ses
+dépendances : aucune installation de Python n'est nécessaire.
+Passer directement aux [commandes d'utilisation](#commandes-dutilisation),
+sans suivre la section d'installation des sources.
+
 Les archives sont **construites et testées sur les runners GitHub**, sur chaque
 système, avec les mêmes dépendances verrouillées que les sources.
 Le fichier `SHA256SUMS.txt` de la release permet de vérifier les téléchargements.
+
+## Option 2 : exécution depuis les sources
+
+Choisir cette méthode **à la place du bundle** pour exécuter ou modifier
+le code Python. **Python 3.12** et Git sont nécessaires. Le moteur de dénivelé
+est fourni dans le dépôt : aucun autre projet, Conda ou interface Qt n'est nécessaire.
+
+Sous Windows, dans PowerShell :
+
+~~~powershell
+git clone https://github.com/nico579/gpx2dash.git
+cd gpx2dash
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --require-hashes -r requirements.txt
+~~~
+
+Pour générer le même catalogue qu'avec le bundle, à partir de ton dossier GPX :
+
+~~~powershell
+.\.venv\Scripts\python.exe -X utf8 gpx2dash.py "C:\chemin\vers\gpx" --from-cache --asphalt --html tableau_bord.html --kml traces.kml --language fr
+~~~
+
+Remplacer `C:\chemin\vers\gpx` par le chemin réel de ton dossier GPX.
+Cette commande produit le même tableau et le même KML que celle du bundle.
+Le script affiche sa progression. Double-cliquer ensuite sur **tableau_bord.html**.
+
+Sous Linux ou macOS, remplacer les commandes de l'environnement par :
+
+~~~bash
+python3.12 -m venv .venv
+.venv/bin/python -m pip install --require-hashes -r requirements.txt
+.venv/bin/python gpx2dash.py "/chemin/vers/gpx" --from-cache --asphalt --html tableau_bord.html --kml traces.kml --language fr
+~~~
+
+Avec les sources, essayer le script **sans appel réseau**, avec l'exemple synthétique fourni :
+
+~~~powershell
+.\.venv\Scripts\python.exe -X utf8 gpx2dash.py examples --from-cache --no-routing --html demonstration.html --kml demonstration.kml
+~~~
+
+Ouvrir **demonstration.html**. Les colonnes routières et le goudron restent
+inconnus tant que leurs données ne sont pas téléchargées.
+
+Le dépôt contient le code et cet exemple synthétique. Les GPX personnels,
+les caches, les captures et les fichiers HTML/KML générés sont exclus par
+**.gitignore**.
+
+## Commandes d'utilisation
+
+Les exemples ci-dessous utilisent le **bundle Windows dans PowerShell**.
+Pour une autre installation, remplacer uniquement le début de la commande :
+
+| Installation | Début de la commande |
+|---|---|
+| Bundle Windows | `.\gpx2dash.exe` |
+| Sources Windows | `.\.venv\Scripts\python.exe -X utf8 gpx2dash.py` |
+| Bundle Linux/macOS | `./gpx2dash` |
+| Sources Linux/macOS | `.venv/bin/python gpx2dash.py` |
+
+Les paramètres restent identiques. Remplacer `C:\chemin\vers\gpx` par le
+chemin de ton dossier GPX (adapté à ton système). Chaque exemple est une
+opération indépendante, pas une suite d'étapes obligatoires.
+
+- **--from-cache** évite tout téléchargement d'altitudes : il réutilise les
+  statistiques valides, les profils locaux, puis les altitudes du GPX.
+- **--asphalt** récupère les données de revêtement OSM manquantes, avec Internet.
+- Les trajets routiers manquants sont calculés par OSRM et conservés dans le cache.
+- Pour utiliser les modèles de terrain IGN et les autres modèles, retirer
+  **--from-cache** ; le premier traitement peut télécharger beaucoup de données.
+- Pour régénérer ensuite avec les seules données locales, retirer **--asphalt**
+  et ajouter **--no-routing**.
 
 ## Langue et en-têtes fixes
 
@@ -52,59 +130,6 @@ aligné avec sa colonne, sur ordinateur et mobile.
 
 Les paramètres et l'aide `--help` sont en anglais. Les anciens paramètres
 français, dont `--depuis-cache`, restent acceptés comme alias cachés.
-
-## Installation depuis les sources
-
-**Python 3.12** et Git sont nécessaires. Le moteur de dénivelé est fourni dans
-le dépôt : aucun autre projet, Conda ou interface Qt n'est nécessaire.
-
-Sous Windows, dans PowerShell :
-
-~~~powershell
-git clone https://github.com/nico579/gpx2dash.git
-cd gpx2dash
-py -3.12 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --require-hashes -r requirements.txt
-~~~
-
-Pour un premier catalogue à partir de ton dossier GPX :
-
-~~~powershell
-.\.venv\Scripts\python.exe -X utf8 gpx2dash.py "..\gpx" --from-cache --asphalt --html tableau_bord.html --kml traces_regroupees.kml
-~~~
-
-Remplacer `..\gpx` par le chemin du dossier souhaité. Le script affiche sa
-progression. Double-cliquer ensuite sur **tableau_bord.html**.
-
-- **--from-cache** évite tout téléchargement d'altitudes : il réutilise les
-  statistiques valides, les profils locaux, puis les altitudes du GPX.
-- **--asphalt** récupère les données de revêtement OSM manquantes, avec Internet.
-- Les trajets routiers manquants sont calculés par OSRM et conservés dans le cache.
-- Pour utiliser les modèles de terrain IGN et les autres modèles, retirer
-  **--from-cache** ; le premier traitement peut télécharger beaucoup de données.
-- Pour régénérer ensuite avec les seules données locales, retirer **--asphalt**
-  et ajouter **--no-routing**.
-
-Sous Linux ou macOS, remplacer les commandes de l'environnement par :
-
-~~~bash
-python3.12 -m venv .venv
-.venv/bin/python -m pip install --require-hashes -r requirements.txt
-.venv/bin/python gpx2dash.py ../gpx --from-cache --asphalt --html tableau_bord.html --kml traces_regroupees.kml
-~~~
-
-Pour essayer le script **sans appel réseau**, avec l'exemple synthétique fourni :
-
-~~~powershell
-.\.venv\Scripts\python.exe -X utf8 gpx2dash.py examples --from-cache --no-routing --html demonstration.html --kml demonstration.kml
-~~~
-
-Ouvrir **demonstration.html**. Les colonnes routières et le goudron restent
-inconnus tant que leurs données ne sont pas téléchargées.
-
-Le dépôt contient le code et cet exemple synthétique. Les GPX personnels,
-les caches, les captures et les fichiers HTML/KML générés sont exclus par
-**.gitignore**.
 
 ## Ouvrir le tableau
 
@@ -175,7 +200,7 @@ se combine avec les conditions de toutes les autres colonnes.
 Pour effectuer le premier calcul, avec Internet :
 
 ~~~powershell
-python gpx2dash.py --from-cache --no-routing --asphalt --html tableau_bord.html --kml traces_regroupees.kml
+.\gpx2dash.exe "C:\chemin\vers\gpx" --from-cache --no-routing --asphalt --html tableau_bord.html --kml traces.kml
 ~~~
 
 Le calcul utilise les points du **GPX original**, avant simplification. Une
@@ -204,7 +229,7 @@ tentatives espacées, avec respect de l'attente annoncée par le serveur.
 Pour modifier les tolérances :
 
 ~~~powershell
-python gpx2dash.py --from-cache --no-routing --asphalt --asphalt-tolerance 20 --asphalt-angle 30 --html tableau_bord.html
+.\gpx2dash.exe "C:\chemin\vers\gpx" --from-cache --no-routing --asphalt --asphalt-tolerance 20 --asphalt-angle 30 --html tableau_bord.html
 ~~~
 
 La marge accepte 1 à 50 mètres ; l'angle accepte 1 à 60 degrés. Les données
@@ -253,17 +278,17 @@ de tuiles ; sa disponibilité n'est pas garantie.
 
 ## Générer le catalogue
 
-Dans PowerShell, depuis ce dossier :
+Dans PowerShell, depuis le dossier du bundle :
 
 ~~~powershell
-python gpx2dash.py --from-cache --asphalt --html tableau_bord.html --kml traces_regroupees.kml
+.\gpx2dash.exe "C:\chemin\vers\gpx" --from-cache --asphalt --html tableau_bord.html --kml traces.kml
 ~~~
 
 Sans dossier indiqué, le script utilise le dossier voisin `../gpx` s'il existe,
 sinon le dossier courant. Un dossier différent peut être fourni en premier argument :
 
 ~~~powershell
-python gpx2dash.py "C:\chemin\vers\les\gpx" --html tableau_bord.html
+.\gpx2dash.exe "C:\chemin\vers\gpx" --html tableau_bord.html
 ~~~
 
 Les extensions .gpx et .GPX sont reconnues. Sans nom de sortie explicite,
@@ -280,7 +305,7 @@ seulement lu. Les trajets OSRM peuvent être calculés en ligne dans ce mode.
 Pour définir une autre ville dès la génération :
 
 ~~~powershell
-python gpx2dash.py --from-cache --origin-city "Toulon, Var, France" --html tableau_bord.html
+.\gpx2dash.exe "C:\chemin\vers\gpx" --from-cache --origin-city "Toulon, Var, France" --html tableau_bord.html
 ~~~
 
 La ligne de commande retient le premier résultat Photon et affiche son libellé.
@@ -288,13 +313,13 @@ La sélection dans le HTML permet de choisir explicitement parmi les résultats.
 Pour fixer des coordonnées exactes :
 
 ~~~powershell
-python gpx2dash.py --origin 43.1242 5.9280 --origin-name "Mon départ à Toulon"
+.\gpx2dash.exe "C:\chemin\vers\gpx" --origin 43.1242 5.9280 --origin-name "Mon départ à Toulon"
 ~~~
 
-Pour générer le tableau sans requête routière par Python :
+Pour générer le tableau sans requête au service de routage :
 
 ~~~powershell
-python gpx2dash.py --from-cache --no-routing --html tableau_bord.html
+.\gpx2dash.exe "C:\chemin\vers\gpx" --from-cache --no-routing --html tableau_bord.html
 ~~~
 
 Les valeurs routières déjà en cache sont conservées. Le choix de ville dans le
@@ -327,7 +352,7 @@ Pour une utilisation partagée ou importante, utiliser son propre
 [serveur OSRM](https://github.com/Project-OSRM/osrm-backend) :
 
 ~~~powershell
-python gpx2dash.py --osrm-server "http://localhost:5000"
+.\gpx2dash.exe "C:\chemin\vers\gpx" --osrm-server "http://localhost:5000"
 ~~~
 
 Le serveur doit fournir le profil voiture et les matrices de distance et de durée ;
@@ -359,12 +384,18 @@ même lot sont préparées une seule fois ;
 le choix des voies proches est vectorisé. Conda n'est pas nécessaire ; le code
 n'utilise pas de compilation JIT Numba actuellement.
 
+## Développement : tests, CI et releases
+
+Ces commandes concernent les contributeurs utilisant **l'installation depuis
+les sources**, depuis le dossier du dépôt. Elles ne sont pas nécessaires
+pour utiliser le bundle.
+
 Contrôles hors réseau :
 
 ~~~powershell
-python -X utf8 test_agreg_denivele.py
-python -X utf8 test_tableau_bord.py
-python -X utf8 test_goudron_osm.py
+.\.venv\Scripts\python.exe -X utf8 test_agreg_denivele.py
+.\.venv\Scripts\python.exe -X utf8 test_tableau_bord.py
+.\.venv\Scripts\python.exe -X utf8 test_goudron_osm.py
 ~~~
 
 La CI teste les calculs, les caches et le rendu sur **Windows, Linux et macOS**.
@@ -380,14 +411,14 @@ Aucun binaire construit localement n'est envoyé sur la release.
 Pour les contrôles navigateur locaux :
 
 ~~~powershell
-python -m pip install --require-hashes -r requirements-dev.txt
-python .qa/verifier_filtres.py --fixtures-only
-python .qa/verifier_carte.py
-python .qa/verifier_langues.py
+.\.venv\Scripts\python.exe -m pip install --require-hashes -r requirements-dev.txt
+.\.venv\Scripts\python.exe -X utf8 .qa/verifier_filtres.py --fixtures-only
+.\.venv\Scripts\python.exe -X utf8 .qa/verifier_carte.py
+.\.venv\Scripts\python.exe -X utf8 .qa/verifier_langues.py
 ~~~
 
 Microsoft Edge est utilisé localement. Avec `GPX2DASH_BROWSER=chromium`,
-installer `python -m playwright install chromium` et utiliser Chromium comme la CI.
+installer `.\.venv\Scripts\python.exe -m playwright install chromium` et utiliser Chromium comme la CI.
 `requirements.in` fixe les dépendances directes ; les verrous runtime, build et
 dev incluent les dépendances transitives et leurs empreintes.
 
