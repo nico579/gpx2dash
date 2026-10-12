@@ -65,7 +65,7 @@ Internet sert à récupérer les données manquantes et à afficher le fond de c
 
 ## Comment le dénivelé est recalculé
 
-Le moteur de calcul **gpx2elev**, fourni avec le projet, applique la même méthode
+Le moteur de calcul **gpx2elev**, installé depuis PyPI, applique la même méthode
 à chaque trace pour obtenir le dénivelé positif **D+** et négatif **D−** :
 
 1. **Préparer le parcours original.** Les coordonnées du GPX sont conservées,
@@ -500,10 +500,10 @@ reverse_geocoder ; le lien OpenStreetMap utilise les coordonnées du GPX.
 Les valeurs inconnues restent des tirets. Les fichiers illisibles gardent leur
 ligne. Le protocole de dénivelé est décrit dans [AGREG_DENIVELE.md](AGREG_DENIVELE.md).
 
-Les dépendances vérifiées sont listées dans **requirements.txt**. Les seuls
-modules de calcul nécessaires de gpx2elev sont inclus dans **gpx2elev/**,
-avec leur version et leur provenance dans **gpx2elev/ORIGINE.md**. L'installation
-ne dépend d'aucun dossier voisin et n'installe pas Qt.
+Les dépendances vérifiées sont listées dans **requirements.txt**. Le moteur
+[gpx2elev](https://pypi.org/project/gpx2elev/) est installé depuis PyPI, à la
+version qui y est figée ; son paquet de base n'installe pas Qt, et l'installation
+ne dépend d'aucun dossier voisin.
 
 Les calculs numériques du goudron utilisent **NumPy**, les transformations
 natives de **PyProj** et l'index spatial natif de **Shapely**. Les voies d'un

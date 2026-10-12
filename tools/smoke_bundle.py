@@ -10,6 +10,7 @@ import sys
 import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import gpx2elev
 from goudron_osm import SERVEUR_OVERPASS
 from gpx2dash import VERSION_CACHE
 from trajets_osrm import cle_trajet
@@ -78,7 +79,7 @@ def main():
             assert len(statistics) == 2
             for stat in statistics:
                 assert stat["distance_m"] > 190 and stat["denivele_pos"] is not None
-                assert stat["ville"] and stat["version_gpx2elev"] == "0.3.6"
+                assert stat["ville"] and stat["version_gpx2elev"] == gpx2elev.__version__
             measures = list(json.loads((cache / "goudron_osm_v1.json").read_text(encoding="utf-8"))["mesures"].values())
             assert len(measures) == 2
             for measure in measures:

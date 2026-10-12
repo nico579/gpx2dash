@@ -1,9 +1,9 @@
 # Calcul du dénivelé d'gpx2dash.py
 
-`gpx2dash.py` utilise les modules de calcul de gpx2elev, version 0.3.6,
-fournis dans `gpx2elev/`, sans interface Qt. Leur provenance et leurs empreintes
-sont conservées dans [gpx2elev/ORIGINE.md](gpx2elev/ORIGINE.md).
-Les dépendances de l'ensemble du script figurent dans `requirements.txt`.
+`gpx2dash.py` utilise le moteur de calcul gpx2elev, installé depuis
+[PyPI](https://pypi.org/project/gpx2elev/) à la version figée dans
+`requirements.txt`, sans interface Qt. Les dépendances de l'ensemble du script
+figurent dans `requirements.txt`.
 
 ## Protocole
 
@@ -26,16 +26,21 @@ calculs GPX (somme brute et filtrée) figurent dans le JSON et les données
 
 ## Cache et lancement
 
-Les anciens caches JSON v5 sont ignorés. Les profils du moteur sont conservés
-dans `.cache_gpx/gpx2elev` avec empreinte des coordonnées et configuration du modèle.
-Les statistiques JSON v6 peuvent être réutilisées avec **--depuis-cache** lorsque
-l'empreinte SHA-256 du GPX et le protocole correspondent ; la date et la durée
-sont relues dans le fichier. Si ces statistiques sont absentes, les profils
-locaux ou les altitudes GPX sont utilisés, sans téléchargement d'altitudes.
+Chaque trace n'est traitée qu'une fois. Ses résultats sont rangés dans
+`.cache_gpx` sous l'empreinte SHA-256 de son contenu (entrées v7) : un renommage
+ou un déplacement ne la fait pas retraiter, et les anciennes entrées v6, nommées
+d'après la trace, sont migrées une fois sans recalcul. Les profils du moteur sont
+conservés dans `.cache_gpx/gpx2elev` avec empreinte des coordonnées et
+configuration du modèle. Le cache ne se vide jamais seul : seul
+**--cache-clear** l'efface.
 
-Sans **--depuis-cache**, les statistiques sont recalculées et les modèles
-prioritaires sont retentés, même après un précédent repli. Quatre processus
-maximum limitent les appels réseau et la consommation mémoire.
+Sans **--depuis-cache**, un dénivelé déjà obtenu d'un modèle d'altitude est
+repris tel quel ; seules les traces nouvelles ou modifiées, et celles qui
+n'avaient obtenu que les altitudes GPX filtrées, sont calculées. Avec
+**--depuis-cache**, tout ce qui est en cache est repris, et une trace nouvelle
+utilise les profils locaux ou les altitudes GPX, sans téléchargement
+d'altitudes. Quatre processus maximum limitent les appels réseau et la
+consommation mémoire.
 
 Exécuter `python gpx2dash.py chemin/vers/gpx --html tableau_bord.html` depuis
 le projet. Le premier calcul complet peut télécharger des données et prendre
