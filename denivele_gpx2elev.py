@@ -1,27 +1,9 @@
-"""Adaptateur vers le moteur partagé de gpx2elev, sans interface graphique.
+"""Adaptateur vers le moteur gpx2elev, sans interface graphique.
 
-Les modules de calcul gpx2elev sont fournis dans ce dépôt, sans Qt.
-La détection des anciens dossiers voisins reste disponible en secours.
+Le moteur est le paquet gpx2elev publié sur PyPI ; son installation de base
+n'entraîne pas Qt.
 """
-import os
-from pathlib import Path
-import sys
-
-try:
-    import gpx2elev
-except ModuleNotFoundError as exc:
-    if exc.name != "gpx2elev":
-        raise
-    voisins = [Path(__file__).resolve().parent.parent / depot / "android" / "desktop"
-               for depot in ("gpxmnt", "gpxelev")]
-    desktop = Path(os.environ["GPX2ELEV_DESKTOP"]) if "GPX2ELEV_DESKTOP" in os.environ else next(
-        (dossier for dossier in voisins if (dossier / "gpx2elev" / "core.py").is_file()), voisins[0]
-    )
-    if not (desktop / "gpx2elev" / "core.py").is_file():
-        raise ImportError("Installer gpx2elev ou définir GPX2ELEV_DESKTOP sur son dossier desktop.") from exc
-    sys.path.insert(0, str(desktop))
-    import gpx2elev
-
+import gpx2elev
 from gpx2elev.core import PROTOCOL, compute, parse_gpx, prepare
 from gpx2elev.providers import MissingCoverage, Repository
 

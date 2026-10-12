@@ -61,7 +61,7 @@ missing data and display the map background.
 
 ## How elevation gain/loss is recalculated
 
-The **gpx2elev** calculation engine, included in the project, applies the same
+The **gpx2elev** calculation engine, installed from PyPI, applies the same
 method to every track to calculate cumulative ascent **D+** and descent **D−**:
 
 1. **Prepare the original route.** GPX coordinates are preserved without
@@ -417,8 +417,8 @@ database; the directions link uses GPX coordinates.
 Unreadable files retain a row; unknown values are dashes.
 
 The elevation protocol is in [AGREG_DENIVELE.md](AGREG_DENIVELE.md).
-Required headless `gpx2elev` modules, version and provenance are included in
-[gpx2elev/ORIGINE.md](gpx2elev/ORIGINE.md).
+The [gpx2elev](https://pypi.org/project/gpx2elev/) engine is installed from PyPI
+at the version locked in `requirements.txt`; its base package does not install Qt.
 Geometry uses NumPy, native PyProj transforms and Shapely's spatial index.
 Roads are prepared once per batch and selection is vectorized.
 Conda is unnecessary; Numba JIT is not currently used.

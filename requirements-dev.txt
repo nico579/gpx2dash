@@ -211,6 +211,12 @@ colorama==0.4.6 ; sys_platform == 'win32' \
 defusedxml==0.7.1 \
     --hash=sha256:1bb3032db185915b62d7c6209c5a8792be6a32ab2fedacc84e01b52c51aa3e69 \
     --hash=sha256:a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61
+    # via
+    #   -r requirements.in
+    #   gpx2elev
+gpx2elev==0.3.7 \
+    --hash=sha256:45a0da87ba3b822213774f7a0e2ca612ca53d6ad48c698ea252548f8f2907d83 \
+    --hash=sha256:e134c5dd84afc6fef0bd4175786020146462aad88f9362141b882c9c181a28ba
     # via -r requirements.in
 gpxpy==1.6.2 \
     --hash=sha256:289bc2d80f116c988d0a1e763fda22838f83005573ece2bbc6521817b26fb40a \
@@ -340,6 +346,7 @@ numpy==1.26.4 \
     --hash=sha256:ffa75af20b44f8dba823498024771d5ac50620e6915abac414251bd971b4529f
     # via
     #   -r requirements.in
+    #   gpx2elev
     #   rasterio
     #   reverse-geocoder
     #   scipy
@@ -451,7 +458,9 @@ pillow==11.3.0 \
     --hash=sha256:f944255db153ebb2b19c51fe85dd99ef0ce494123f21b9db4877ffdfc5590c7c \
     --hash=sha256:fdae223722da47b024b867c1ea0be64e0df702c5e0a60e27daad39bf960dd1e4 \
     --hash=sha256:fe27fb049cdcca11f11a7bfda64043c37b30e6b91f10cb5bab275806c32f6ab3
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   gpx2elev
 playwright==1.61.0 \
     --hash=sha256:009588c2a7e499bc5a8b425b61fa65490968bbda9cd69e0cf2cff10f8304659a \
     --hash=sha256:35c6cc4589a5d00964a59d7b3e59641e0aac0c02f15479a7af77d20f6bc79597 \
@@ -549,11 +558,15 @@ rasterio==1.4.3 \
     --hash=sha256:d9bab1a0bb22b8bed1db34b5258db93d790ed4e61ef21ac055a7c6933c8d5e84 \
     --hash=sha256:e703e4b2c74c678786d5d110a3f30e26f3acfd65f09ccf35f69683a532f7a772 \
     --hash=sha256:e79847a5a0e01399457a1e02d8c92040cb56729d054fe7796f0c17b246b18bf0
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   gpx2elev
 requests==2.34.2 \
     --hash=sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0 \
     --hash=sha256:f288924cae4e29463698d6d60bc6a4da69c89185ad1e0bcc4104f584e960b9ed
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   gpx2elev
 reverse-geocoder==1.5.1 \
     --hash=sha256:2a2e781b5f69376d922b78fe8978f1350c84fce0ddb07e02c834ecf98b57c75c
     # via -r requirements.in
