@@ -154,20 +154,19 @@
  function writeStorage(name, value) {
   try { localStorage.setItem(name, JSON.stringify(value)); } catch { /* cache mémoire si stockage interdit ou plein */ }
  }
- function fresh(route) {
-  if (!route || typeof route !== "object") return false;
-  const age = Date.now() - Date.parse(route.date_route);
-  return age >= 0 && age < (route.erreur_route ? 86400000 : 30 * 86400000) &&
-   (route.erreur_route ? route.route_cacheable === true : known(route.distance_route_m) && known(route.duree_route_s));
+ // Pas d'expiration : un trajet, ou une erreur durable, reste valable.
+ function usable(route) {
+  if (!route || typeof route !== "object" || Number.isNaN(Date.parse(route.date_route))) return false;
+  return route.erreur_route ? route.route_cacheable === true : known(route.distance_route_m) && known(route.duree_route_s);
  }
  for (const entries of [readStorage("gpx2dash.routes.v1", {}), data.cache]) {
   for (const [k, route] of Object.entries(entries)) {
-   if (fresh(route) && (!routeCache.has(k) ||
+   if (usable(route) && (!routeCache.has(k) ||
     Date.parse(route.date_route) > Date.parse(routeCache.get(k).date_route))) routeCache.set(k, route);
   }
  }
  function saveCache() {
-  for (const [k, route] of routeCache) if (!fresh(route)) routeCache.delete(k);
+  for (const [k, route] of routeCache) if (!usable(route)) routeCache.delete(k);
   writeStorage("gpx2dash.routes.v1", Object.fromEntries(routeCache));
  }
  function filter() {
@@ -389,7 +388,7 @@
   const results = new Map(), missing = [];
   let finished = 0;
   groups.forEach(group => {
-   if (fresh(routeCache.get(group.key))) { results.set(group.key, routeCache.get(group.key)); finished += group.count; }
+   if (usable(routeCache.get(group.key))) { results.set(group.key, routeCache.get(group.key)); finished += group.count; }
    else missing.push(group);
   });
   const progress = () => { message(status, "Calcul depuis {city} : {n} / {total} traces traitées…", {city: city.libelle, n: finished, total: data.traces.length}); };
@@ -418,7 +417,7 @@
   const routes = new Map();
   data.traces.forEach(trace => {
    const k = key(trace.position, saved.position);
-   if (fresh(routeCache.get(k))) routes.set(k, routeCache.get(k));
+   if (usable(routeCache.get(k))) routes.set(k, routeCache.get(k));
   });
   if (data.traces.every(trace => routes.has(key(trace.position, saved.position)))) {
    applyOrigin(saved, routes); setChoices([saved]); input.value = saved.libelle;

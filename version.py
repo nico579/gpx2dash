@@ -1,2 +1,2 @@
 """Application version shared by the CLI and GitHub builds."""
-VERSION = "0.2.2"
+VERSION = "0.3.0"

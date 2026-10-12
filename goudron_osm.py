@@ -21,7 +21,6 @@ PROTOCOL_GOUDRON = "goudron-osm-v1-5m-direction10m"
 MARGE_GOUDRON = 15.0
 ANGLE_GOUDRON = 30.0
 PAS_M = 5.0
-DUREE_CACHE_S = 30 * 86400
 SURFACES_GOUDRON = {"asphalt", "chipseal", "tarmac", "bitumen", "tar"}
 SURFACES_AUTRES = {
     "unpaved", "compacted", "fine_gravel", "gravel", "pebblestone",
@@ -207,10 +206,12 @@ def mesurer_goudron(segments, voies, *, marge=MARGE_GOUDRON, angle=ANGLE_GOUDRON
     }
 
 
-def _recent(record):
+def _date_valide(record):
+    # Pas d'expiration : une mesure reste valable tant que la trace et les
+    # paramètres ne changent pas. Seul --cache-clear vide le cache.
     try:
-        age = (datetime.now(timezone.utc) - datetime.fromisoformat(record["goudron_date"])).total_seconds()
-        return 0 <= age < DUREE_CACHE_S
+        datetime.fromisoformat(record["goudron_date"])
+        return True
     except (ValueError, TypeError, KeyError, AttributeError):
         return False
 
@@ -400,7 +401,7 @@ def ajouter_goudron_osm(resultats, *, dossier_cache, en_ligne=False, marge=MARGE
         mesure_key = source_key + f"|{marge:g}|{angle:g}|{PROTOCOL_GOUDRON}"
         mesure = manifest["mesures"].get(mesure_key, {})
         champs = ("distance_goudron_m", "goudron_incertain_m", "goudron_longueur_m")
-        if (_recent(mesure) and isinstance(mesure, dict) and
+        if (_date_valide(mesure) and isinstance(mesure, dict) and
                 all(isinstance(mesure.get(c), (int, float)) and not isinstance(mesure[c], bool)
                     and math.isfinite(mesure[c]) and mesure[c] >= 0 for c in champs)):
             bilan["cache"] += 1
@@ -410,7 +411,7 @@ def ajouter_goudron_osm(resultats, *, dossier_cache, en_ligne=False, marge=MARGE
         fichier = snapshot.get("fichier", "") if isinstance(snapshot, dict) else ""
         # Des noms de fichiers générés, jamais des chemins arbitraires du manifeste.
         safe_name = isinstance(fichier, str) and len(fichier) == 69 and fichier.endswith(".json") and all(c in "0123456789abcdef" for c in fichier[:64])
-        if (_recent(snapshot) and safe_name and isinstance(snapshot.get("rayon"), (int, float)) and
+        if (_date_valide(snapshot) and safe_name and isinstance(snapshot.get("rayon"), (int, float)) and
                 isinstance(snapshot.get("tolerance_geometrie"), (int, float)) and
                 snapshot["rayon"] >= marge + snapshot["tolerance_geometrie"] + 5 and
                 (dossier / "goudron_osm" / fichier).is_file()):

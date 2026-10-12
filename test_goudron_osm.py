@@ -251,13 +251,20 @@ class CacheTests(unittest.TestCase):
                 ClientOverpass().telecharger("query")
             sleep.assert_not_called()
 
-    def test_expired_or_malformed_cache_cannot_hide_missing_data(self):
+    def test_old_cache_is_kept_but_malformed_cannot_hide_missing_data(self):
         with patch.object(ClientOverpass, "telecharger", return_value=response([self.road])):
             ajouter_goudron_osm([self.trace()], dossier_cache=self.root, en_ligne=True)
         path = self.root / "goudron_osm_v1.json"
         data = json.loads(path.read_text(encoding="utf-8"))
         for record in list(data["mesures"].values()) + list(data["sources"].values()):
             record["goudron_date"] = "2000-01-01T00:00:00+00:00"
+        path.write_text(json.dumps(data), encoding="utf-8")
+        old = self.trace()
+        with patch.object(ClientOverpass, "telecharger", side_effect=AssertionError):
+            ajouter_goudron_osm([old], dossier_cache=self.root, en_ligne=True)
+        self.assertGreater(old["distance_goudron_m"], 990)
+        for record in list(data["mesures"].values()) + list(data["sources"].values()):
+            record["goudron_date"] = "pas une date"
         path.write_text(json.dumps(data), encoding="utf-8")
         trace = self.trace()
         ajouter_goudron_osm([trace], dossier_cache=self.root, en_ligne=False)

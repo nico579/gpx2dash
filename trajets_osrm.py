@@ -69,10 +69,10 @@ def lire_cache(path):
 
 
 def cache_valide(route):
+    # Pas d'expiration : un trajet, ou une erreur durable, reste valable.
+    # Seul --cache-clear vide le cache.
     try:
-        age = (datetime.now(timezone.utc) - datetime.fromisoformat(route["date_route"])).total_seconds()
-        if not 0 <= age < (86400 if route.get("erreur_route") else 30 * 86400):
-            return False
+        datetime.fromisoformat(route["date_route"])
         if route.get("erreur_route"):
             return route.get("route_cacheable") is True
         return all(not isinstance(route[cle], bool) and math.isfinite(route[cle]) and route[cle] >= 0

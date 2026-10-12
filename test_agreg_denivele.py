@@ -2,6 +2,7 @@
 import concurrent.futures
 import json
 from pathlib import Path
+import re
 import shutil
 import tempfile
 import unittest
@@ -102,13 +103,97 @@ class ElevationTests(unittest.TestCase):
         self.assertEqual(agreg._calc_duree(gpx), 600)
         self.assertEqual(gpx.to_xml(), before)
 
-    def test_cache_name_same_for_default_and_typed_tolerance(self):
-        # argparse garde le défaut entier (10) mais lit « --tolerance 10 » comme 10.0.
+    def _traiter_avec_modele(self, path, tolerance=10):
+        def dem(brut, cache):
+            return calculer_denivele(brut, cache, reader=Reader())
+        with patch.object(agreg, 'calculer_denivele', dem):
+            return agreg.extraire_et_reduire((str(path), tolerance))
+
+    def test_processed_trace_survives_rename_without_reprocessing(self):
+        path = self.directory / 'avant.gpx'
+        path.write_bytes(fixture())
+        first = self._traiter_avec_modele(path)
+        first['ville'] = 'Test'
+        agreg.ecrire_cache_trace(first)
+        renamed = path.rename(self.directory / '2026-01-02_apres.gpx')
+        with patch.object(agreg, 'calculer_denivele', side_effect=AssertionError), \
+                patch.object(agreg.gpxpy, 'parse', side_effect=AssertionError):
+            again = agreg.extraire_et_reduire((str(renamed), 10, {'cache_seulement': True}))
+        self.assertTrue(again['cache_a_jour'])
+        # La date tirée du nom suit le fichier ; le reste vient du contenu.
+        self.assertEqual((again['nom'], again['date'], again['ville']), ('2026-01-02_apres', '2026-01-02', 'Test'))
+        self.assertEqual(again['denivele_exact'], first['denivele_exact'])
+
+    def test_new_tolerance_resimplifies_without_recomputing_elevation(self):
         path = self.directory / 'tolerance.gpx'
         path.write_bytes(fixture())
-        with patch.object(agreg, 'calculer_denivele', return_value={}):
-            noms = {Path(agreg.extraire_et_reduire((str(path), t))['chemin_cache']).name for t in (10, 10.0)}
-        self.assertEqual(noms, {f'tolerance_tol10_{agreg.VERSION_CACHE}.json'})
+        first = self._traiter_avec_modele(path)
+        agreg.ecrire_cache_trace(first)
+        with patch.object(agreg, 'calculer_denivele', side_effect=AssertionError):
+            fine = agreg.extraire_et_reduire((str(path), 5))
+            with patch.object(agreg.gpxpy, 'parse', side_effect=AssertionError):
+                # argparse garde le défaut entier (10) mais lit « --tolerance 10 » comme 10.0.
+                typed = agreg.extraire_et_reduire((str(path), 10.0))
+        self.assertEqual(set(fine['segments_par_tolerance']), {'10', '5'})
+        self.assertEqual(fine['chemin_cache'], first['chemin_cache'])
+        self.assertEqual(typed['segments'], first['segments'])
+
+    def test_gps_fallback_is_retried_except_with_from_cache(self):
+        path = self.directory / 'secours.gpx'
+        path.write_bytes(fixture())
+        with patch.object(agreg, 'calculer_denivele', lambda brut, cache: calculer_denivele(brut, cache, online=False)):
+            first = agreg.extraire_et_reduire((str(path), 10))
+        self.assertEqual(first['source_denivele'], 'GPX')
+        agreg.ecrire_cache_trace(first)
+        with patch.object(agreg, 'calculer_denivele', return_value=first) as compute:
+            agreg.extraire_et_reduire((str(path), 10))
+            compute.assert_called_once()
+            agreg.extraire_et_reduire((str(path), 10, {'statistiques_cache': True, 'altitudes_en_ligne': False}))
+            compute.assert_called_once()
+
+    def test_legacy_named_entry_is_migrated_without_recomputing_elevation(self):
+        path = self.directory / 'ancienne.gpx'
+        path.write_bytes(fixture())
+        legacy = {k: v for k, v in self._traiter_avec_modele(path).items()
+                  if k not in ('date_gpx', 'segments_par_tolerance', 'cache_a_jour')}
+        legacy['ville'] = 'Ancienne'
+        cache = self.directory / agreg.DOSSIER_CACHE
+        (cache / f'ancienne_tol10_{agreg.ANCIENNE_VERSION_CACHE}.json').write_text(json.dumps(legacy), encoding='utf-8')
+        with patch.object(agreg, 'calculer_denivele', side_effect=AssertionError):
+            migrated = agreg.extraire_et_reduire((str(path), 10))
+        self.assertFalse(migrated['cache_a_jour'])
+        self.assertEqual(migrated['ville'], 'Ancienne')
+        self.assertEqual(Path(migrated['chemin_cache']).name, f"{migrated['empreinte_gpx']}_{agreg.VERSION_CACHE}.json")
+
+    def test_invalid_content_is_kept_as_an_error(self):
+        path = self.directory / 'illisible.gpx'
+        path.write_bytes(b'pas un GPX')
+        first = agreg.extraire_et_reduire((str(path), 10))
+        self.assertTrue(first['erreur_definitive'])
+        agreg.ecrire_cache_trace(first)
+        with patch.object(agreg.gpxpy, 'parse', side_effect=AssertionError):
+            again = agreg.extraire_et_reduire((str(path), 10, {'cache_seulement': True}))
+        self.assertEqual(again['erreur'], first['erreur'])
+
+    def test_elevation_cache_is_never_trimmed(self):
+        with patch('gpx2elev.providers.trim_cache') as trim:
+            calculer_denivele(fixture(), self.directory / 'gpx2elev', reader=Reader())
+        trim.assert_not_called()
+
+    def test_cache_clear_removes_only_gpx2dash_files(self):
+        cache = self.directory / 'cache'
+        for name in ('gpx2elev/tiles/t.webp', 'gpx2elev/profiles/p.profile', 'goudron_osm/a.json',
+                     'goudron_osm_v1.json', 'trajets_osrm_v1.json', f'{"0" * 64}_{agreg.VERSION_CACHE}.json',
+                     f'trace_tol10_{agreg.ANCIENNE_VERSION_CACHE}.json', 'tmp1234.part', 'notes.txt', 'trace.gpx'):
+            (cache / name).parent.mkdir(parents=True, exist_ok=True)
+            (cache / name).write_text('x', encoding='utf-8')
+        self.assertEqual(agreg.vider_cache(cache), 7)
+        self.assertEqual(sorted(p.name for p in cache.iterdir()), ['notes.txt', 'trace.gpx'])
+
+    def test_cache_clear_cannot_be_combined_with_from_cache(self):
+        with patch('sys.argv', ['gpx2dash.py', str(self.directory), '--cache-clear', '--from-cache']), \
+                patch('sys.stderr'), self.assertRaises(SystemExit):
+            agreg.main()
 
     def test_windows_worker_and_changed_input(self):
         path = self.directory / 'worker.gpx'
@@ -145,8 +230,28 @@ class ElevationTests(unittest.TestCase):
         ns = {'k': 'http://www.opengis.net/kml/2.2'}
         self.assertEqual(len(root.findall('.//k:LineString', ns)), 1)
         self.assertIn('_D+?_', root.find('.//k:Placemark/k:name', ns).text)
-        cache = next((self.directory / agreg.DOSSIER_CACHE).glob('route_tol*_v6-gpx2elev.json'))
+        cache = next((self.directory / agreg.DOSSIER_CACHE).glob(f'*_{agreg.VERSION_CACHE}.json'))
         self.assertIsNone(json.loads(cache.read_text(encoding='utf-8'))['denivele_pos'])
+
+    def test_second_run_starts_no_worker_and_reads_no_gpx(self):
+        import reverse_geocoder
+        (self.directory / 'a.gpx').write_bytes(fixture())
+        output = self.directory / 'output.kml'
+        def dem(brut, cache):
+            return calculer_denivele(brut, cache, reader=Reader())
+        with patch.object(agreg, 'calculer_denivele', dem), \
+                patch.object(agreg.concurrent.futures, 'ProcessPoolExecutor', concurrent.futures.ThreadPoolExecutor), \
+                patch.object(reverse_geocoder, 'search', return_value=[{'name': 'Test'}]):
+            agreg.fusionner_gpx_vers_kml_parallele(str(self.directory), str(output), routes_en_ligne=False)
+        first = output.read_bytes()
+        with patch.object(agreg, 'calculer_denivele', side_effect=AssertionError), \
+                patch.object(agreg.gpxpy, 'parse', side_effect=AssertionError), \
+                patch.object(agreg.concurrent.futures, 'ProcessPoolExecutor', side_effect=AssertionError), \
+                patch.object(reverse_geocoder, 'search', side_effect=AssertionError):
+            agreg.fusionner_gpx_vers_kml_parallele(str(self.directory), str(output), routes_en_ligne=False)
+        # simplekml numérote ses éléments par processus : seuls ces numéros diffèrent.
+        sans_ids = lambda kml: re.sub(rb'(id="|#)\d+', rb'\1', kml)
+        self.assertEqual(sans_ids(output.read_bytes()), sans_ids(first))
 
     def test_real_reference_and_aggregator(self):
         desktop = Path(__file__).resolve().parent.parent / 'gpxmnt/android/desktop'

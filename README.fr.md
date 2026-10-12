@@ -99,9 +99,13 @@ sont conservées dans le cache et les données étendues du KML. Les fichiers GP
 sources sont seulement lus. Le protocole complet est décrit dans
 [AGREG_DENIVELE.md](AGREG_DENIVELE.md).
 
-Sans `--from-cache`, le moteur recalcule les statistiques et récupère les
-données d'altitude manquantes. Avec `--from-cache`, il réutilise les statistiques
-valides ou les profils d'altitude déjà en cache, puis les altitudes GPX filtrées ;
+Chaque trace n'est traitée qu'une fois. Ses résultats sont rangés sous
+l'empreinte SHA-256 de son contenu : un renommage ou un déplacement ne la fait
+pas retraiter. Sans `--from-cache`, seules les traces nouvelles ou modifiées sont
+calculées, ainsi que celles qui n'avaient obtenu que les altitudes GPX filtrées,
+et les données d'altitude manquantes sont téléchargées. Avec `--from-cache`, les
+résultats en cache sont repris tels quels et une trace nouvelle utilise les
+profils d'altitude déjà en cache, puis les altitudes GPX filtrées ;
 **aucune donnée d'altitude n'est téléchargée**.
 
 ## Installer et lancer
@@ -206,6 +210,8 @@ opération indépendante, pas une suite d'étapes obligatoires.
 
 - **--from-cache** évite tout téléchargement d'altitudes : il réutilise les
   statistiques valides, les profils locaux, puis les altitudes du GPX.
+- **--cache-clear** vide d'abord le cache : chaque trace est retraitée et ses
+  données retéléchargées. Sans lui, le cache ne se vide jamais.
 - **--asphalt** récupère les données de revêtement OSM manquantes, avec Internet.
 - Les trajets routiers manquants sont calculés par OSRM et conservés dans le cache.
 - Pour utiliser les modèles de terrain IGN et les autres modèles, retirer
@@ -253,7 +259,7 @@ Une fois le tableau ouvert :
 
 Les deux colonnes routières, leurs liens OpenStreetMap et le bilan sont mis à jour.
 Le tri choisi reste appliqué. Le dernier départ et les résultats sont conservés
-dans le navigateur ; les résultats récents sont réutilisés sans nouvel appel.
+dans le navigateur ; les résultats déjà calculés sont réutilisés sans nouvel appel.
 Le tableau propose aussi des filtres combinables et le téléchargement de chaque GPX.
 
 Garéoult est le départ initial. Une connexion Internet est nécessaire pour chercher
@@ -331,7 +337,7 @@ Pour modifier les tolérances :
 
 La marge accepte 1 à 50 mètres ; l'angle accepte 1 à 60 degrés. Les données
 locales couvrent les changements de marge dans cet intervalle. Les mesures
-et les voies OSM sont conservées pendant **30 jours** dans
+et les voies OSM sont conservées jusqu'à **--cache-clear** dans
 .cache_gpx/goudron_osm_v1.json et .cache_gpx/goudron_osm/.
 Le cache distingue l'empreinte du GPX, les tolérances, le serveur et le
 protocole de calcul. Sans **--asphalt**, seules les données locales sont
@@ -412,13 +418,16 @@ sinon le dossier courant. Un dossier différent peut être fourni en premier arg
 Les extensions .gpx et .GPX sont reconnues. Sans nom de sortie explicite,
 les fichiers KML et HTML sont horodatés. Les caches des sources sont écrits dans
 .cache_gpx de gpx2dash ; le bundle utilise .cache_gpx du dossier courant.
-Le chemin est configurable avec --cache.
+Le chemin est configurable avec --cache. Le cache ne se vide jamais seul :
+profils d'altitude et tuiles du MNT, mesures de goudron, voies OSM et trajets
+sont conservés jusqu'à --cache-clear, qui n'efface que les fichiers créés par
+gpx2dash dans ce dossier.
 
---from-cache réutilise les statistiques du dossier GPX si l'empreinte SHA-256
-et le protocole de calcul correspondent. La date et la durée sont relues dans
-le GPX. À défaut de statistiques valides, le moteur utilise les profils locaux
-ou les altitudes GPX, sans téléchargement d'altitudes. Le dossier source est
-seulement lu. Les trajets OSRM peuvent être calculés en ligne dans ce mode.
+--from-cache reprend tous les résultats en cache, y compris ceux du dossier GPX,
+si l'empreinte SHA-256 et le protocole de calcul correspondent. Une trace
+nouvelle utilise les profils locaux ou les altitudes GPX, sans téléchargement
+d'altitudes. Le dossier source est seulement lu. Les trajets OSRM peuvent être
+calculés en ligne dans ce mode.
 
 Pour définir une autre ville dès la génération :
 
@@ -455,8 +464,8 @@ la raison figure au survol des cellules.
 
 Les départs de traces identiques sont regroupés. Les requêtes de matrice
 portent sur 25 destinations au maximum, avec au moins 1,05 seconde entre
-deux appels. Le cache distingue serveur, origine et destination ; sa durée
-est de 30 jours pour les trajets et de 24 heures pour les absences de route.
+deux appels. Le cache distingue serveur, origine et destination ; trajets et
+absences de route y sont conservés jusqu'à --cache-clear.
 Les pannes réseau ne sont pas mémorisées comme une absence de route.
 Le serveur public répartit ses données par continent. Si un lot mixte est
 rattaché loin de l'origine, une seconde requête fixe la région du départ ;
