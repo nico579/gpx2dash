@@ -324,8 +324,7 @@ def fusionner_gpx_vers_kml_parallele(dossier_entree, fichier_sortie, tolerance_m
         # Une LineString par segment GPX, regroupées dans une MultiGeometry :
         # évite le trait droit parasite entre segments (pause d'enregistrement).
         trace = kml.newmultigeometry(name=nom_complet)
-        for cle in ('modele', 'protocole', 'denivele_exact', 'gpx_somme_brute',
-                    'gpx_filtre', 'replis', 'erreur_modeles', 'distance_goudron_m',
+        for cle in ('distance_goudron_m',
                     'goudron_incertain_m', 'goudron_marge_m', 'goudron_angle_deg'):
             trace.extendeddata.newdata(cle, json.dumps(res.get(cle), ensure_ascii=False))
         for segment in res['segments']:
