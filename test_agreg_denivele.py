@@ -250,7 +250,8 @@ class ElevationTests(unittest.TestCase):
                 patch.object(reverse_geocoder, 'search', side_effect=AssertionError):
             agreg.fusionner_gpx_vers_kml_parallele(str(self.directory), str(output), routes_en_ligne=False)
         # simplekml numérote ses éléments par processus : seuls ces numéros diffèrent.
-        sans_ids = lambda kml: re.sub(rb'(id="|#)\d+', rb'\1', kml)
+        def sans_ids(kml):
+            return re.sub(rb'(id="|#)\d+', rb'\1', kml)
         self.assertEqual(sans_ids(output.read_bytes()), sans_ids(first))
 
     def test_real_reference_and_aggregator(self):
