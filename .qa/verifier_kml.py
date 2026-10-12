@@ -56,6 +56,10 @@ with tempfile.TemporaryDirectory() as directory:
             channel=None if os.environ.get("GPX2DASH_BROWSER") == "chromium" else "msedge")
         context = browser.new_context(locale="en-GB", accept_downloads=True, viewport={"width": 1440, "height": 1050})
         page = context.new_page()
+        def popup_title():
+            # Leaflet removes the previous popup after its fade animation.
+            page.wait_for_function("document.querySelectorAll('.map-popup h3').length === 1")
+            return page.locator(".map-popup h3").inner_text()
         errors, routes, tiles, alerts = [], [], [], []
         tile_mode = {"fail": False}
         page.on("pageerror", lambda error: errors.append(str(error)))
@@ -97,7 +101,7 @@ with tempfile.TemporaryDirectory() as directory:
         assert event.value.suggested_filename == kml_path.name
         assert Path(event.value.path()).read_bytes() == kml_path.read_bytes()
         page.locator(".catalogue-path").first.press("Enter")
-        assert page.locator(".map-popup h3").inner_text() == names[0]
+        assert popup_title() == names[0]
         assert page.locator(".map-popup dt").count() == 8
         assert "10.0 km" in page.locator(".map-popup").inner_text()
         with page.expect_download() as event:
@@ -106,7 +110,7 @@ with tempfile.TemporaryDirectory() as directory:
         page.locator("#language").evaluate("el => {el.value='fr'; el.dispatchEvent(new Event('change'));}")
         assert page.locator("#map-title").inner_text() == "KML agrégé"
         assert "4 / 4 trace(s)" in page.locator("#map-status").inner_text()
-        assert page.locator(".map-popup h3").inner_text() == names[0]
+        assert popup_title() == names[0]
         assert "10,0 km" in page.locator(".map-popup").inner_text()
         assert page.locator("#map-only-visible").is_visible()
         page.screenshot(path=str(root / "kml_desktop.png"))
@@ -129,9 +133,7 @@ with tempfile.TemporaryDirectory() as directory:
         assert page.locator(".catalogue-path").count() == 2
         assert set(page.locator(".catalogue-path").evaluate_all("paths => paths.map(p => p.dataset.traceId)")) == set(names[2:])
         page.locator(".catalogue-path").last.press("Enter")
-        # Leaflet removes the closing popup after its fade animation.
-        page.wait_for_function("document.querySelectorAll('.map-popup h3').length === 1")
-        assert page.locator(".map-popup h3").inner_text() == names[3]
+        assert popup_title() == names[3]
         assert page.locator(".map-popup img").count() == 0 and not alerts
         page.locator("#filter-2-value").evaluate("el => {el.value='99'; el.dispatchEvent(new Event('input'));}")
         assert page.locator(".catalogue-path").count() == 0
@@ -147,7 +149,7 @@ with tempfile.TemporaryDirectory() as directory:
         page.locator("#language").select_option("en")
         page.locator("#map-catalogue").click()
         page.locator(".catalogue-path").first.press("Enter")
-        assert page.locator(".map-popup h3").inner_text() == names[0]
+        assert popup_title() == names[0]
         assert page.locator("#map-title").inner_text() == "Aggregated KML"
         box = page.locator("#map-dialog").bounding_box()
         assert box["x"] >= 0 and box["x"] + box["width"] <= 390
