@@ -129,6 +129,8 @@ with tempfile.TemporaryDirectory() as directory:
         assert page.locator(".catalogue-path").count() == 2
         assert set(page.locator(".catalogue-path").evaluate_all("paths => paths.map(p => p.dataset.traceId)")) == set(names[2:])
         page.locator(".catalogue-path").last.press("Enter")
+        # Leaflet removes the closing popup after its fade animation.
+        page.wait_for_function("document.querySelectorAll('.map-popup h3').length === 1")
         assert page.locator(".map-popup h3").inner_text() == names[3]
         assert page.locator(".map-popup img").count() == 0 and not alerts
         page.locator("#filter-2-value").evaluate("el => {el.value='99'; el.dispatchEvent(new Event('input'));}")
