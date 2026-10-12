@@ -99,6 +99,7 @@ with sync_playwright() as playwright:
     assert len(route_requests) == 1
     page.keyboard.press("Escape")
     assert not page.locator("#map-dialog").is_visible()
+    page.locator("#route-settings summary").click()
     page.locator("#route-city").fill("Hyères")
     page.locator("#city-search").click()
     page.wait_for_function("!document.querySelector('#calculate-routes').disabled")

@@ -151,12 +151,14 @@ def generer_tableau_bord(resultats, fichier_sortie, *, libelle_origine="Mairie d
             nom_affiche = f'<a href="{escape(lien, quote=True)}" download>{nom_affiche}</a>'
         contenu_date = f'<span class="date">{date_affichee}</span><span class="trace-name">{nom_affiche}</span>'
         ville = str(res.get("ville") or "Lieu inconnu")
+        titre_lieu = str(res.get("erreur") or "")
         if "erreur" in res:
             lieu = f'<span class="error" data-row-i18n="Trace illisible">Trace illisible</span><span class="detail">{escape(str(res["erreur"]))}</span>'
         else:
             lieu = escape(ville) if res.get("ville") else '<span data-row-i18n="Lieu inconnu">Lieu inconnu</span>'
             if res.get("lat_lon_depart"):
                 latitude, longitude = res["lat_lon_depart"]
+                titre_lieu = f"{latitude:.5f}, {longitude:.5f}"
                 lieu += f'<span class="detail">{latitude:.5f}, {longitude:.5f}</span>'
             if res.get("itineraire_url"):
                 carte = bool(_segments_carte(res))
@@ -172,8 +174,8 @@ def generer_tableau_bord(resultats, fichier_sortie, *, libelle_origine="Mairie d
         if res.get("date_route") and not titre_route:
             titre_route = f'OSRM, relevé le {res["date_route"]}. Sans trafic en temps réel.'
         cellules = [
-            _cellule(jour, contenu_date, "trace"),
-            _cellule(ville if res.get("ville") and "erreur" not in res else None, lieu, "place"),
+            _cellule(jour, contenu_date, "trace", titre=nom),
+            _cellule(ville if res.get("ville") and "erreur" not in res else None, lieu, "place", titre=titre_lieu),
             _cellule(_nombre(res.get("distance_m")), _distance(res.get("distance_m")), unite_filtre="km"),
             _cellule(plus, denivele, titre=str(res.get("modele") or "Dénivelé inconnu"), unite_filtre="m"),
             _cellule(_nombre(res.get("duree_s")), _duree(res.get("duree_s")), unite_filtre="min"),

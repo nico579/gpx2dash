@@ -45,6 +45,29 @@ with tempfile.TemporaryDirectory() as directory:
             page.locator(f"#filter-{column}-value").fill(value)
             if upper is not None:
                 page.locator(f"#filter-{column}-upper").fill(upper)
+        def visible_rows():
+            return page.evaluate("""() => {
+                const area = document.querySelector('.table-scroll').getBoundingClientRect();
+                const head = document.querySelector('thead').getBoundingClientRect();
+                return [...document.querySelectorAll('tbody tr:not([hidden])')].filter(row => {
+                    const box = row.getBoundingClientRect();
+                    return box.top >= Math.max(area.top, head.bottom) - 1
+                        && box.bottom <= Math.min(area.bottom, innerHeight) + 1;
+                }).length;
+            }""")
+        for width, height in ((1280, 720), (1366, 768), (390, 844)):
+            page.set_viewport_size({"width": width, "height": height})
+            for language in ("fr", "en"):
+                page.locator("#language").select_option(language)
+                page.evaluate("scrollTo(0, 0)")
+                assert visible_rows() >= 10, (width, height, language, visible_rows())
+                condition(2, "between", "0", "100")
+                page.evaluate("scrollTo(0, 0); document.querySelector('.table-scroll').scrollTop = 0")
+                if width == 390 and language == "fr":
+                    page.screenshot(path=str(Path(__file__).resolve().parent / "density_mobile.png"))
+                assert visible_rows() >= 10, (width, height, language, "between", visible_rows())
+                page.locator("#reset-filters").click()
+        page.set_viewport_size({"width": 1440, "height": 1050})
         condition(2, "between", "12,3", "14")
         condition(3, "<", "506")
         condition(7, ">", "2")

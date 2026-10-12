@@ -171,6 +171,7 @@ try:
         set_condition(5, "<", "20")
         set_condition(6, "<", "20")
         expect("CF")
+        page.locator("#route-settings summary").click()
         page.locator("#route-city").fill("Hyères")
         page.locator("#city-search").click()
         page.wait_for_function("!document.querySelector('#calculate-routes').disabled")
