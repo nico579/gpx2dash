@@ -241,16 +241,18 @@ class OSRMTests(unittest.TestCase):
             self.assertTrue(all("distance_route_m" not in result for result in results))
             self.assertTrue(all("43.120000" in result["itineraire_url"] for result in results))
 
-    def test_cache_expiration_server_and_origin(self):
+    def test_cache_never_expires_server_and_origin(self):
         now = datetime.now(timezone.utc)
         route = {"distance_route_m": 1, "duree_route_s": 2, "date_route": now.isoformat()}
         self.assertTrue(cache_valide(route))
-        for date in (now - timedelta(days=31), now + timedelta(days=1)):
-            self.assertFalse(cache_valide({**route, "date_route": date.isoformat()}))
+        for date in (now - timedelta(days=3650), now + timedelta(days=1)):
+            self.assertTrue(cache_valide({**route, "date_route": date.isoformat()}))
+        self.assertFalse(cache_valide({**route, "date_route": "pas une date"}))
         self.assertFalse(cache_valide({**route, "distance_route_m": float("nan")}))
         error = {"erreur_route": "No route", "route_cacheable": True, "date_route": now.isoformat()}
         self.assertTrue(cache_valide(error))
-        self.assertFalse(cache_valide({**error, "date_route": (now - timedelta(days=2)).isoformat()}))
+        self.assertTrue(cache_valide({**error, "date_route": (now - timedelta(days=2)).isoformat()}))
+        self.assertFalse(cache_valide({**error, "route_cacheable": False}))
         self.assertNotEqual(cle_trajet((43, 6)), cle_trajet((43, 6), (43.1, 6)))
         self.assertNotEqual(cle_trajet((43, 6)), cle_trajet((43, 6), serveur="http://localhost:5000"))
 

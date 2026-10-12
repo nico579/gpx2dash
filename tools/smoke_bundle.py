@@ -11,6 +11,7 @@ import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from goudron_osm import SERVEUR_OVERPASS
+from gpx2dash import VERSION_CACHE
 from trajets_osrm import cle_trajet
 from version import VERSION
 
@@ -72,13 +73,17 @@ def main():
             assert 'id="map-catalogue"' in content and 'id="map-only-visible"' in content
             assert 'id="language"' in content and "position: sticky" in content
             assert kml.is_file() and "MultiGeometry" in kml.read_text(encoding="utf-8")
-            statistics = [json.loads(p.read_text(encoding="utf-8")) for p in cache.glob("*_v6-gpx2elev.json")]
+            # One entry per GPX content; asphalt depends on its parameters and keeps its own manifest.
+            statistics = [json.loads(p.read_text(encoding="utf-8")) for p in cache.glob(f"*_{VERSION_CACHE}.json")]
             assert len(statistics) == 2
             for stat in statistics:
-                assert stat["distance_goudron_m"] > 190, stat
-                assert stat["goudron_incertain_m"] == 0
                 assert stat["distance_m"] > 190 and stat["denivele_pos"] is not None
                 assert stat["ville"] and stat["version_gpx2elev"] == "0.3.6"
+            measures = list(json.loads((cache / "goudron_osm_v1.json").read_text(encoding="utf-8"))["mesures"].values())
+            assert len(measures) == 2
+            for measure in measures:
+                assert measure["distance_goudron_m"] > 190, measure
+                assert measure["goudron_incertain_m"] == 0
             assert "10,0 km" in content
         assert all(path.read_bytes() == raw for path, raw in originals.items())
         # The default working cache must be writable in cwd, never inside frozen resources.

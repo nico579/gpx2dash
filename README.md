@@ -94,10 +94,13 @@ in the cache and KML extended data. Source GPX files are only read.
 The complete protocol is documented in
 [AGREG_DENIVELE.md](AGREG_DENIVELE.md) (in French).
 
-Without `--from-cache`, the engine recalculates statistics and retrieves missing
-elevation data. With `--from-cache`, it reuses valid statistics or cached
-elevation profiles, then filtered GPX elevations; **no elevation data is
-downloaded**.
+Each track is processed once. Its results are cached under the SHA-256
+fingerprint of its content, so renaming or moving a file does not reprocess it.
+Without `--from-cache`, only new or modified tracks are calculated, along with
+tracks that only obtained filtered GPX elevations, and missing elevation data is
+downloaded. With `--from-cache`, cached results are reused as they are and a new
+track uses cached elevation profiles, then filtered GPX elevations; **no
+elevation data is downloaded**.
 
 ## Install and run
 
@@ -210,12 +213,14 @@ including `--depuis-cache`, remain accepted as hidden compatibility aliases.
 
 ## What does --from-cache change?
 
-With **`--from-cache`**, verified statistics are reused when the GPX SHA-256
-fingerprint and elevation protocol match. Date and duration are still read
-from the original GPX. If statistics are absent, the engine uses local profiles,
-then filtered GPX elevations. **No elevation data is downloaded.**
+With **`--from-cache`**, every cached result is reused when the GPX SHA-256
+fingerprint and elevation protocol match, including filtered GPX fallbacks.
+A new track uses local profiles, then filtered GPX elevations. **No elevation
+data is downloaded.**
 
-Without **`--from-cache`**, statistics are recalculated. The engine first uses
+Without **`--from-cache`**, a track already calculated from an elevation model
+is reused without reading its GPX again. New or modified tracks, and tracks that
+fell back to filtered GPX elevations, are calculated. The engine first uses
 available terrain data and downloads missing data as needed, ranking full-track
 coverage as IGN LiDAR HD, Mapterhorn, FABDEM, Copernicus GLO-30, then SRTM90.
 If none covers the track, filtered GPX elevations are used. The first run can
@@ -226,6 +231,7 @@ These switches are independent:
 | Parameter | Effect |
 |---|---|
 | `--from-cache` | Reuse verified statistics / local elevation data; no elevation downloads |
+| `--cache-clear` | Empty the cache first: every track is processed and downloaded again |
 | `--no-routing` | Use routing cache only; no OSRM requests during generation |
 | `--asphalt` | Download missing nearby OSM road surfaces with Overpass |
 | no `--asphalt` | Reuse local asphalt measurements or road snapshots only |
@@ -238,6 +244,9 @@ To regenerate entirely from local data:
 
 Source caches default to `.cache_gpx` in the project folder. Bundles use
 `.cache_gpx` in the current directory. Set `--cache PATH` to choose another folder.
+The cache never empties itself: elevation profiles and DEM tiles, asphalt
+measurements, OSM road snapshots and routes are kept until `--cache-clear`,
+which removes only the files gpx2dash created in that folder.
 
 ## Choose the driving origin
 
@@ -312,7 +321,9 @@ minimum; unknown values are never treated as zero.
 Download failures also leave a dash, with details in the tooltip.
 **Rerun with `--asphalt` to resume missing tracks**. Successful measurements
 are retained. Transient Overpass failures use bounded retries and respect
-the server's requested delay.
+the server's requested delay. A batch too heavy for the server (timeout or
+oversized response) is split in two until the responsible track is isolated,
+so the other tracks are still measured.
 
 Change tolerances with:
 
@@ -321,7 +332,7 @@ Change tolerances with:
 ~~~
 
 Distance tolerance accepts 1–50 m; angle accepts 1–60°. Measurements and road
-snapshots are cached for **30 days** in `.cache_gpx/goudron_osm_v1.json` and
+snapshots are kept until `--cache-clear` in `.cache_gpx/goudron_osm_v1.json` and
 `.cache_gpx/goudron_osm/`, distinguished by fingerprint, tolerances, server
 and protocol. Nearby tracks share batches, with at least three seconds between
 Overpass requests. Choose an endpoint with `--overpass-server URL`.
@@ -376,7 +387,7 @@ connection, leaves unknown values with a tooltip.
 
 Identical starts are grouped. Matrices use at most 25 destinations, with at
 least 1.05 seconds between requests. Cache keys include server, origin and
-destination. Routes are valid for 30 days; genuine route absences for 24 hours.
+destination. Routes and genuine route absences are kept until `--cache-clear`.
 Network outages are not cached as absent routes. For mixed continents, a
 second request fixes the origin region when the initial snap is too distant.
 

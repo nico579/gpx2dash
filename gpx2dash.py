@@ -11,6 +11,7 @@ import concurrent.futures
 from tqdm import tqdm
 import json
 import hashlib
+import shutil
 from collections import Counter
 from pathlib import Path
 
@@ -24,7 +25,17 @@ from trajets_osrm import (DEPART_GAREOULT, SERVEUR_OSRM, ajouter_trajets_osrm,
                           chercher_villes, coordonnees, serveur_valide)
 
 DOSSIER_CACHE = ".cache_gpx"
-VERSION_CACHE = "v6-gpx2elev"
+# Une entrée par contenu GPX (empreinte SHA-256), quel que soit le nom du fichier.
+# À incrémenter si le calcul de la date, de la durée ou des segments change :
+# une trace déjà traitée est reprise telle quelle, sans relire le GPX.
+VERSION_CACHE = "v7"
+# Anciennes entrées nommées d'après la trace, relues une fois pour migrer sans recalcul.
+ANCIENNE_VERSION_CACHE = "v6-gpx2elev"
+CLES_STATS = ('denivele_pos', 'denivele_neg', 'denivele_exact', 'source_denivele',
+              'modele', 'distance_m', 'gpx_somme_brute', 'gpx_filtre', 'protocole',
+              'version_gpx2elev', 'positions_5m', 'replis', 'erreur_modeles')
+# Ce qui ne dépend que du contenu ; le nom et le chemin viennent toujours du fichier.
+CLES_ENTREE = ('empreinte_gpx', *CLES_STATS, 'date_gpx', 'duree_s', 'lat_lon_depart', 'ville')
 
 def nettoyer_heure_du_nom(nom):
     # Retire l'heure HH-MM-SS (ou HH:MM:SS, HHMMSS) qui suit une date YYYY-MM-DD (ou YYYYMMDD).
@@ -54,18 +65,23 @@ def _calc_duree(gpx):
     # Temps en mouvement (pauses exclues) ; repli sur le temps écoulé
     # premier -> dernier point si les données de vitesse sont inexploitables.
     duree_s = None
+    # L'altitude GPS bruitée ne doit pas gonfler les vitesses (distance 3D) :
+    # elle est effacée le temps du calcul, puis restaurée. Pas de gpx.clone(),
+    # dont la copie profonde prenait près de la moitié d'une exécution en cache.
+    points = [point for track in gpx.tracks for segment in track.segments
+              for point in segment.points]
+    altitudes = [point.elevation for point in points]
     try:
-        # L'altitude GPS bruitée ne doit pas gonfler les vitesses (distance 3D).
-        copie = gpx.clone()
-        for track in copie.tracks:
-            for segment in track.segments:
-                for point in segment.points:
-                    point.elevation = None
-        mouvement = copie.get_moving_data()
+        for point in points:
+            point.elevation = None
+        mouvement = gpx.get_moving_data()
         if mouvement is not None and mouvement.moving_time:
             duree_s = mouvement.moving_time
     except Exception:
         pass
+    finally:
+        for point, altitude in zip(points, altitudes):
+            point.elevation = altitude
     if duree_s is None:
         bornes = gpx.get_time_bounds()
         if bornes.start_time is not None and bornes.end_time is not None:
@@ -85,69 +101,130 @@ def extraire_et_reduire(args):
     identite = {'nom': nom_trace, 'chemin_gpx': str(Path(chemin_fichier).resolve()),
                 'date': date_du_nom(nom_trace)}
     dossier_cache = Path(options.get("dossier_cache") or Path(chemin_fichier).parent / DOSSIER_CACHE)
-    nom_cache = f"{nom_trace}_tol{tolerance_m}_{VERSION_CACHE}.json"
-    fichier_cache = dossier_cache / nom_cache
-    candidats = [fichier_cache]
-    if options.get("cache_source"):
-        candidats.append(Path(options["cache_source"]) / nom_cache)
+    dossiers = [dossier_cache] + ([Path(options["cache_source"])] if options.get("cache_source") else [])
+    # :g, car argparse laisse le défaut entier (10) mais lit --tolerance 10 comme 10.0.
+    tolerance = f"{tolerance_m:g}"
+    empreinte = fichier_cache = gpx = None
     try:
         brut = Path(chemin_fichier).read_bytes()
-        try:
-            texte = brut.decode('utf-8-sig')
-        except UnicodeDecodeError:
-            texte = brut.decode('latin-1')
-        gpx = gpxpy.parse(texte)
         empreinte = hashlib.sha256(brut).hexdigest()
-        donnees_cache = {}
+        fichier_cache = dossier_cache / f"{empreinte}_{VERSION_CACHE}.json"
+        # Indexée sur le contenu, l'entrée survit à un renommage ou à un déplacement.
+        candidats = ([dossier / fichier_cache.name for dossier in dossiers] +
+                     [dossier / f"{nom_trace}_tol{tolerance}_{ANCIENNE_VERSION_CACHE}.json" for dossier in dossiers])
+        entree, source_entree = {}, None
         for candidat in candidats:
             try:
                 donnees = json.loads(candidat.read_text(encoding='utf-8'))
-                if isinstance(donnees, dict) and donnees.get('empreinte_gpx') == empreinte:
-                    donnees_cache = donnees
-                    break
             except (OSError, ValueError):
                 continue
-        cles_stats = ('denivele_pos', 'denivele_neg', 'denivele_exact', 'source_denivele',
-                      'modele', 'distance_m', 'gpx_somme_brute', 'gpx_filtre', 'protocole',
-                      'version_gpx2elev', 'positions_5m', 'replis', 'erreur_modeles')
-        reutilise = (options.get("statistiques_cache", False)
-                     and donnees_cache.get("protocole") == PROTOCOL
-                     and all(cle in donnees_cache for cle in cles_stats))
+            if isinstance(donnees, dict) and donnees.get('empreinte_gpx') == empreinte:
+                entree, source_entree = donnees, candidat
+                break
+        a_jour = source_entree == fichier_cache
+        if isinstance(entree.get('erreur'), str):
+            # Un contenu illisible le reste : il n'est pas retraité.
+            return {**identite, 'erreur': entree['erreur'], 'empreinte_gpx': empreinte,
+                    'chemin_cache': str(fichier_cache), 'erreur_definitive': True, 'cache_a_jour': a_jour}
+        # Une trace n'est traitée qu'une fois : un dénivelé issu d'un modèle d'altitude
+        # est définitif. Un repli sur l'altitude GPS (hors connexion, réseau coupé) est
+        # retenté en mode normal ; --from-cache reprend tout ce qui est en cache.
+        reutilise = (entree.get("protocole") == PROTOCOL
+                     and all(cle in entree for cle in CLES_STATS)
+                     and (options.get("statistiques_cache", False)
+                          or entree.get("source_denivele") not in ("GPX", "INCONNU")))
+        segments_connus = entree['segments'] if isinstance(entree.get('segments'), dict) else {}
+        geometrie = (tolerance in segments_connus
+                     and all(cle in entree for cle in ('date_gpx', 'duree_s', 'lat_lon_depart')))
+        if options.get("cache_seulement") and not (reutilise and geometrie):
+            return None
+        if not geometrie:
+            try:
+                texte = brut.decode('utf-8-sig')
+            except UnicodeDecodeError:
+                texte = brut.decode('latin-1')
+            gpx = gpxpy.parse(texte)
         if reutilise:
-            stats = {cle: donnees_cache[cle] for cle in cles_stats}
+            stats = {cle: entree[cle] for cle in CLES_STATS}
         elif options.get("altitudes_en_ligne", True):
             stats = calculer_denivele(brut, dossier_cache / 'gpx2elev')
         else:
             stats = calculer_denivele(brut, dossier_cache / 'gpx2elev', online=False)
     except Exception as e:
-        return {**identite, 'erreur': f"Échec lecture ou calcul : {e}"}
+        resultat = {**identite, 'erreur': f"Échec lecture ou calcul : {e}"}
+        if empreinte is not None and not isinstance(e, OSError):
+            # Une erreur de contenu est définitive ; une erreur d'accès disque peut passer.
+            resultat.update(empreinte_gpx=empreinte, chemin_cache=str(fichier_cache), erreur_definitive=True)
+        return resultat
 
-    # Date et durée sont toujours extraites avant la simplification.
-    duree_s = _calc_duree(gpx)
-    date_trace = extraire_date(gpx, nom_trace)
-    gpx.simplify(max_distance=tolerance_m)
-    segments = []
-    for track in gpx.tracks:
-        for segment in track.segments:
-            points = [[point.longitude, point.latitude] for point in segment.points]
+    if gpx is None:
+        segments = segments_connus[tolerance]
+        date_gpx, duree_s, depart = entree['date_gpx'], entree['duree_s'], entree['lat_lon_depart']
+    else:
+        # Date et durée sont toujours extraites avant la simplification.
+        duree_s = _calc_duree(gpx)
+        # Date du seul contenu : celle tirée du nom suit le fichier, pas le cache.
+        date_gpx = extraire_date(gpx, "")
+        gpx.simplify(max_distance=tolerance_m)
+        segments = []
+        for track in gpx.tracks:
+            for segment in track.segments:
+                points = [[point.longitude, point.latitude] for point in segment.points]
+                if len(points) >= 2:
+                    segments.append(points)
+        for route in gpx.routes:
+            points = [[point.longitude, point.latitude] for point in route.points]
             if len(points) >= 2:
                 segments.append(points)
-    for route in gpx.routes:
-        points = [[point.longitude, point.latitude] for point in route.points]
-        if len(points) >= 2:
-            segments.append(points)
-    if not segments:
-        return {**identite, 'erreur': "Aucune donnée de tracé."}
-    lon_depart, lat_depart = segments[0][0]
+        if not segments:
+            return {**identite, 'erreur': "Aucune donnée de tracé.", 'empreinte_gpx': empreinte,
+                    'chemin_cache': str(fichier_cache), 'erreur_definitive': True}
+        lon_depart, lat_depart = segments[0][0]
+        depart = (lat_depart, lon_depart)
+        segments_connus = {**segments_connus, tolerance: segments}
     resultat = {
-        **identite, 'date': date_trace, 'chemin_cache': str(fichier_cache),
-        'segments': segments, 'lat_lon_depart': (lat_depart, lon_depart),
-        **stats, 'empreinte_gpx': empreinte, 'duree_s': duree_s,
-        'statistiques_cache': bool(reutilise),
+        **identite, 'date': date_gpx or date_du_nom(nom_trace), 'chemin_cache': str(fichier_cache),
+        'segments': segments, 'lat_lon_depart': tuple(depart),
+        **stats, 'empreinte_gpx': empreinte, 'duree_s': duree_s, 'date_gpx': date_gpx,
+        'statistiques_cache': bool(reutilise), 'segments_par_tolerance': segments_connus,
+        # Rien à réécrire quand tout vient déjà de l'entrée de ce cache.
+        'cache_a_jour': a_jour and reutilise and gpx is None and entree.get('ville') is not None,
     }
-    if donnees_cache.get('ville') is not None:
-        resultat['ville'] = donnees_cache['ville']
+    if entree.get('ville') is not None:
+        resultat['ville'] = entree['ville']
     return resultat
+
+
+def ecrire_cache_trace(resultat):
+    """Entrée indexée sur le contenu : sans le nom ni le chemin, qui peuvent changer."""
+    if 'erreur' in resultat:
+        if not resultat.get('erreur_definitive'):
+            return
+        entree = {'empreinte_gpx': resultat['empreinte_gpx'], 'erreur': resultat['erreur']}
+    else:
+        entree = {cle: resultat[cle] for cle in CLES_ENTREE if cle in resultat}
+        entree['segments'] = resultat['segments_par_tolerance']
+    atomic_write(resultat['chemin_cache'], json.dumps(entree, ensure_ascii=False).encode('utf-8'))
+
+
+def vider_cache(dossier):
+    """--cache-clear : efface ce que gpx2dash a créé dans ce dossier, rien d'autre."""
+    dossier = Path(dossier)
+    if not dossier.is_dir():
+        return 0
+    cibles = [dossier / nom for nom in ("gpx2elev", "goudron_osm", "goudron_osm_v1.json", "trajets_osrm_v1.json")]
+    cibles += [*dossier.glob(f"*_{VERSION_CACHE}.json"),
+               *dossier.glob(f"*_tol*_{ANCIENNE_VERSION_CACHE}.json"), *dossier.glob("*.part")]
+    supprimes = 0
+    for cible in cibles:
+        if cible.is_dir() and not cible.is_symlink():
+            shutil.rmtree(cible)
+        elif cible.exists() or cible.is_symlink():
+            cible.unlink()
+        else:
+            continue
+        supprimes += 1
+    return supprimes
 
 def fusionner_gpx_vers_kml_parallele(dossier_entree, fichier_sortie, tolerance_m=10, epaisseur=3,
                                     *, fichier_html=None, routes_en_ligne=True,
@@ -157,11 +234,6 @@ def fusionner_gpx_vers_kml_parallele(dossier_entree, fichier_sortie, tolerance_m
                                     angle_goudron=ANGLE_GOUDRON, serveur_overpass=SERVEUR_OVERPASS,
                                     langue=None):
     """Produit le KML et son tableau HTML, à partir des mêmes statistiques GPX."""
-    # Import local et pas en tête de fichier : sous Windows chaque worker du
-    # ProcessPoolExecutor ré-importe le module (spawn), or seul le processus
-    # principal se sert du géocodeur (scipy derrière, import coûteux).
-    import reverse_geocoder as rg
-
     fichiers_gpx = sorted(str(fichier) for fichier in Path(dossier_entree).iterdir()
                           if fichier.is_file() and fichier.suffix.lower() == '.gpx')
     if not fichiers_gpx:
@@ -178,14 +250,18 @@ def fusionner_gpx_vers_kml_parallele(dossier_entree, fichier_sortie, tolerance_m
     }
     taches = [(f, tolerance_m, options) for f in fichiers_gpx]
 
-    # Limite les appels réseau simultanés et la mémoire des lecteurs raster.
-    with concurrent.futures.ProcessPoolExecutor(max_workers=min(4, os.cpu_count() or 1)) as executeur:
-        resultats = list(tqdm(
-                    executeur.map(extraire_et_reduire, taches, chunksize=1),
-            total=len(taches),
-            desc="Parsing GPX & simplification",
-            ncols=100
-        ))
+    # Une trace déjà traitée est reprise du cache ici même, sans lancer de processus.
+    resultats = [extraire_et_reduire((f, tolerance_m, {**options, "cache_seulement": True}))
+                 for f in fichiers_gpx]
+    a_traiter = [i for i, res in enumerate(resultats) if res is None]
+    print(f"{len(resultats) - len(a_traiter)} traces reprises du cache, {len(a_traiter)} à traiter.")
+    if a_traiter:
+        # Limite les appels réseau simultanés et la mémoire des lecteurs raster.
+        with concurrent.futures.ProcessPoolExecutor(max_workers=min(4, os.cpu_count() or 1)) as executeur:
+            traitees = tqdm(executeur.map(extraire_et_reduire, [taches[i] for i in a_traiter], chunksize=1),
+                            total=len(a_traiter), desc="Parsing GPX & simplification", ncols=100)
+            for i, res in zip(a_traiter, traitees):
+                resultats[i] = res
 
     print("\nIdentification des villes...")
     coords_a_chercher = []
@@ -197,9 +273,15 @@ def fusionner_gpx_vers_kml_parallele(dossier_entree, fichier_sortie, tolerance_m
             indices_a_chercher.append(i)
 
     if coords_a_chercher:
+        # Import local et pas en tête de fichier : sous Windows chaque worker du
+        # ProcessPoolExecutor ré-importe le module (spawn), or seul le processus
+        # principal se sert du géocodeur (scipy derrière, import coûteux), et
+        # seulement pour les traces nouvelles.
+        import reverse_geocoder as rg
         villes_trouvees = rg.search(coords_a_chercher, verbose=False)
         for index, geo in zip(indices_a_chercher, villes_trouvees):
             resultats[index]['ville'] = geo['name']
+            resultats[index]['cache_a_jour'] = False
 
     print("Mesure des portions longées près du goudron OSM...")
     with tqdm(total=len(resultats), desc="Goudron OSM / cache", ncols=100) as barre:
@@ -215,11 +297,12 @@ def fusionner_gpx_vers_kml_parallele(dossier_entree, fichier_sortie, tolerance_m
         print("Cache goudron non enregistré : " + bilan_goudron["erreur_cache"])
 
     for res in resultats:
-        if 'erreur' not in res:
-            try:
-                atomic_write(res['chemin_cache'], json.dumps(res, ensure_ascii=False).encode('utf-8'))
-            except OSError as exc:
-                print(f"[{res['nom']}] Cache non enregistré : {exc}")
+        if res.pop('cache_a_jour', False):
+            continue
+        try:
+            ecrire_cache_trace(res)
+        except OSError as exc:
+            print(f"[{res['nom']}] Cache non enregistré : {exc}")
 
     print("Compilation du fichier KML...")
     kml = simplekml.Kml()
@@ -299,6 +382,8 @@ def main():
                         help="Working cache folder.")
     parser.add_argument("--from-cache", action="store_true",
                         help="Reuse verified statistics; use local elevation data or filtered GPX if absent. No elevation downloads.")
+    parser.add_argument("--cache-clear", action="store_true",
+                        help="Empty the cache folder first, so every track is processed and downloaded again. The cache never empties itself.")
     parser.add_argument("--kml", help="Output KML file.")
     parser.add_argument("--html", help="Output HTML dashboard file.")
     parser.add_argument("--no-routing", action="store_true", help="Use the routing cache only; no OSRM requests from Python.")
@@ -351,12 +436,16 @@ def main():
         parser.error(str(exc))
     if not (0 < args.tolerance < float("inf") and 0 < args.line_width < float("inf")):
         parser.error("Tolerance and line width must be positive and finite.")
+    if args.cache_clear and args.from_cache:
+        parser.error("--cache-clear and --from-cache cannot be combined.")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     kml = args.kml or f"tracks_{timestamp}.kml"
     html = args.html or f"dashboard_{timestamp}.html"
     if Path(kml).resolve() == Path(html).resolve():
         parser.error("KML and HTML outputs must be different files.")
     Path(kml).resolve().parent.mkdir(parents=True, exist_ok=True)
+    if args.cache_clear:
+        print(f"Cache cleared: {vider_cache(args.cache)} item(s) removed.")
     fusionner_gpx_vers_kml_parallele(
         args.folder, kml, tolerance_m=args.tolerance, epaisseur=args.line_width,
         fichier_html=html, routes_en_ligne=not args.no_routing,

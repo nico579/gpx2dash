@@ -44,7 +44,9 @@ def calculer_denivele(brut, dossier_cache, *, online=True, reader=None):
         # Le profil nul sert seulement à obtenir les statistiques GPX communes.
         computed = compute(prepared, series.values if series else [0.0] * prepared.sample_count)
     finally:
-        repository.close()
+        # Pas de repository.close() : il élague les profils et les tuiles du MNT
+        # au-delà d'une taille. gpx2dash ne vide son cache que sur --cache-clear.
+        repository.http.close()
     gain = computed.gain if series else computed.gpx_filtered
     def valeurs(value):
         return {"Dplus_m": value.up, "Dmoins_m": value.down} if value is not None else None
