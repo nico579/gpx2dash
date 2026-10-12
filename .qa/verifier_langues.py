@@ -65,7 +65,11 @@ with tempfile.TemporaryDirectory() as directory:
                 page.evaluate("scrollTo(0, 0); document.querySelector('.table-scroll').scrollTop = 0")
                 if width == 390 and language == "fr":
                     page.screenshot(path=str(Path(__file__).resolve().parent / "density_mobile.png"))
-                assert visible_rows() >= 10, (width, height, language, "between", visible_rows())
+                assert visible_rows() >= 10, (
+                    width, height, language, "between", visible_rows(),
+                    page.locator("header").bounding_box(), page.locator(".stats").bounding_box(),
+                    page.locator(".table-scroll").bounding_box(), page.locator("thead").bounding_box(),
+                    page.locator("tbody tr").nth(9).bounding_box())
                 page.locator("#reset-filters").click()
         page.set_viewport_size({"width": 1440, "height": 1050})
         condition(2, "between", "12,3", "14")

@@ -103,6 +103,10 @@ footer a { color: inherit; }
  header { align-items: start; flex-direction: column; gap: 6px; }
  h1 { font-size: 20px; }
  .origin { white-space: normal; }
+ .header-controls { width: 100%; flex-wrap: nowrap; gap: 8px; }
+ .origin { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+ .origin-label { display: none; }
+ .language-control { flex-shrink: 0; }
  .language-control > span { display: none; }
  .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; margin-bottom: 6px; }
  .stat { align-items: start; flex-direction: column; gap: 1px; padding: 3px 6px; }
@@ -188,15 +192,15 @@ footer a { color: inherit; }
 <header>
   <h1 data-i18n="Tableau de bord des traces">Tableau de bord des traces</h1>
  <div class="header-controls">
- <div class="origin"><span data-i18n="Départ des trajets">Départ des trajets</span> · <strong data-origine>@@ORIGINE@@</strong></div>
+ <div class="origin"><span class="origin-label"><span data-i18n="Départ des trajets">Départ des trajets</span> · </span><strong data-origine>@@ORIGINE@@</strong></div>
  <label class="language-control"><span data-i18n="Langue">Langue</span><select id="language" aria-label="Language / Langue"><option value="en">EN · English</option><option value="fr">FR · Français</option></select></label>
  </div>
 </header>
 <section class="stats" aria-label="Bilan des traces" data-i18n-aria-label="Bilan des traces">
- <div class="stat"><span class="stat-label" data-i18n="Traces du catalogue">Traces du catalogue</span><strong class="stat-value">@@NOMBRE@@</strong></div>
- <div class="stat"><span class="stat-label" data-i18n="Distance cumulée des traces">Distance cumulée des traces</span><strong class="stat-value" data-total-distance>@@DISTANCE@@</strong></div>
- <div class="stat"><span class="stat-label" data-i18n="Dénivelé positif connu">Dénivelé positif connu</span><strong class="stat-value" data-total-ascent>@@DENIVELE@@</strong></div>
- <div class="stat"><span class="stat-label" data-i18n="Trajets routiers OSRM renseignés">Trajets routiers OSRM renseignés</span><strong class="stat-value" id="routes-count">@@ROUTES@@</strong></div>
+ <div class="stat"><span class="stat-label" data-i18n="Traces">Traces</span><strong class="stat-value">@@NOMBRE@@</strong></div>
+ <div class="stat"><span class="stat-label" data-i18n="Distance totale">Distance totale</span><strong class="stat-value" data-total-distance>@@DISTANCE@@</strong></div>
+ <div class="stat"><span class="stat-label" data-i18n="D+ total">D+ total</span><strong class="stat-value" data-total-ascent>@@DENIVELE@@</strong></div>
+ <div class="stat"><span class="stat-label" data-i18n="Trajets OSRM">Trajets OSRM</span><strong class="stat-value" id="routes-count">@@ROUTES@@</strong></div>
 </section>
 <details class="route-settings" id="route-settings">
  <summary id="routes-title" data-i18n="Choisir la ville de départ des trajets">Choisir la ville de départ des trajets</summary>
