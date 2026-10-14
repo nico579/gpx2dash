@@ -55,7 +55,7 @@ h2 { font-size: 14px; margin: 0; font-weight: 650; }
 thead { position: sticky; top: 0; z-index: 3; background: #f3f6f0; box-shadow: 0 1px 0 var(--line); }
 .language-control { display: flex; align-items: center; gap: 8px; font-size: 12px; }
 #language { border: 1px solid #bcccbc; border-radius: 6px; padding: 7px; color: var(--green); background: #fff; }
-table { border-collapse: collapse; table-layout: fixed; width: 100%; min-width: 1180px; font-size: 13px; }
+table { border-collapse: collapse; table-layout: fixed; width: 100%; min-width: 1320px; font-size: 13px; }
 thead th:nth-child(1), thead th:nth-child(2) { width: 20%; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 caption { text-align: left; padding: 12px 22px; color: var(--muted); font-size: 12px; background: #fafbf7; }
@@ -67,6 +67,8 @@ th[aria-sort="ascending"] .arrow::before { content: "↑"; }
 th[aria-sort="descending"] .arrow::before { content: "↓"; }
 .arrow::before { content: "↕"; color: var(--green); }
 td { padding: 3px 8px; border-bottom: 1px solid #e8ece4; vertical-align: middle; line-height: 1.35; }
+.shared-tracks-link { border: 0; background: none; color: var(--green); font: inherit; font-weight: 650; text-decoration: underline; text-underline-offset: 3px; padding: 4px 8px; cursor: pointer; }
+.shared-tracks-link:focus-visible { outline: 2px solid var(--green); outline-offset: 1px; border-radius: 4px; }
 .column-filter { padding: 5px 6px; background: #f3f6f0; border-bottom: 1px solid var(--line); }
 .column-filter select, .column-filter input { display: block; width: 100%; min-width: 0; border: 1px solid #bcccbc; border-radius: 5px; padding: 4px 5px; font: inherit; font-size: 12px; color: var(--ink); background: #fff; }
 .column-filter select { width: 56px; float: left; margin-right: 4px; }
@@ -255,6 +257,7 @@ footer a { color: inherit; }
     <th scope="col" aria-sort="none"><button type="button" data-column="5"><span data-i18n="Route (km)">Route (km)</span> <span class="arrow" aria-hidden="true"></span></button></th>
     <th scope="col" aria-sort="none"><button type="button" data-column="6"><span data-i18n="Durée de route">Durée de route</span> <span class="arrow" aria-hidden="true"></span></button></th>
     <th scope="col" aria-sort="none"><button type="button" data-column="7"><span data-i18n="Goudron (km)">Goudron (km)</span> <span class="arrow" aria-hidden="true"></span></button></th>
+     <th scope="col" aria-sort="none"><button type="button" data-column="8"><span data-i18n="Traces communes">Traces communes</span> <span class="arrow" aria-hidden="true"></span></button></th>
    </tr><tr id="column-filters"></tr></thead>
    <tbody>
 @@LIGNES@@
@@ -264,6 +267,7 @@ footer a { color: inherit; }
  <p id="no-results" class="empty" hidden data-i18n="Aucune trace à afficher.">Aucune trace à afficher.</p>
 </section>
 <div class="notes">
+ <p data-i18n-html="sharedNote"><strong>Traces communes.</strong> Nombre d'autres traces partageant au moins @@LONGUEURCOMMUNE@@ m continus, avec une tolérance de @@MARGECOMMUNE@@ m. La trace elle-même est exclue. Cliquer sur le nombre pour afficher la trace et ses parcours communs.</p>
  <p data-i18n-html="trackNote"><strong>Lecture des traces.</strong> La durée estime le temps en mouvement, avec repli sur le temps écoulé. Le dénivelé est une estimation du moteur gpx2elev. Le lieu correspond à la commune la plus proche ; le lien OpenStreetMap utilise les coordonnées du départ.</p>
  <p><strong><span data-i18n="Trajets depuis">Trajets depuis</span> <span data-origine>@@ORIGINE@@</span>.</strong> <span id="route-note">@@NOTE@@</span></p>
  <p class="surface-note" data-i18n-html="surfaceNote"><strong>Goudron longé.</strong> Estimation sur les points du GPX d’origine, à moins de @@MARGEGOUDRON@@ m de l’axe d’une voie bitumineuse OSM et avec un écart de direction de @@ANGLEGOUDRON@@° maximum ; les croisements perpendiculaires sont exclus.

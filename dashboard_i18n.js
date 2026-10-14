@@ -58,6 +58,15 @@ const dashboardI18n = (() => {
   "Distance de route": "Driving distance",
   "Durée de route": "Driving time",
   "Goudron longé (OSM)": "Alongside asphalt (OSM)",
+  "Traces communes": "Shared tracks",
+  "traces": "tracks",
+  "Afficher la trace et ses traces communes": "Show this track and its shared tracks",
+  "Comparaison non calculée.": "Shared portions not calculated.",
+  "Traces communes : {name}": "Shared tracks: {name}",
+  "Carte de la trace et de ses traces communes": "Map of this track and its shared tracks",
+  "La trace sélectionnée est dessinée plus épaisse.": "The selected track is drawn thicker.",
+  "Trace sélectionnée et {n} autre(s) trace(s) partageant au moins {minimum} m, à {margin} m maximum.": "Selected track and {n} other track(s) sharing at least {minimum} m, within {margin} m.",
+  "sharedTitle": "Other tracks sharing at least {minimum} continuous metres, within {margin} m. Excludes this track. Click to view the shared tracks.",
   "Aucune trace à afficher.": "No tracks to display.",
   "Trajets depuis": "Routes from",
   "Routage": "Routing",
@@ -147,9 +156,14 @@ const dashboardI18n = (() => {
  const french = {
   "routeNote": "Trajets aller en voiture calculés par OSRM, sans trafic en temps réel, jusqu’à la route accessible la plus proche du départ. L’approche à pied n’est pas incluse. {missing} trajet(s) non renseigné(s) ; la raison apparaît au survol des cellules. {errors} fichier(s) GPX illisible(s).",
   "asphaltTitle": "Voies OSM bitumineuses longées à {margin} m maximum ; écart de direction ≤ {angle}°. Asphalt, chipseal, tarmac, bitumen ou tar uniquement. Les revêtements absents ou ambigus restent incertains. Le filtre porte sur le minimum repéré. {date}",
+  "sharedTitle": "Autres traces partageant au moins {minimum} m continus, à {margin} m maximum. La trace elle-même n'est pas comptée. Cliquer pour afficher les parcours communs.",
   "Entre (inclus)": "Entre"
 };
  const html = {
+   "sharedNote": [
+    "<strong>Traces communes.</strong> Nombre d’autres traces partageant au moins {minimum} m continus, avec une tolérance de {overlap} m. La trace elle-même est exclue. Cliquer sur le nombre pour afficher la trace et ses parcours communs ; la trace sélectionnée est dessinée plus épaisse.",
+    "<strong>Shared tracks.</strong> Number of other tracks sharing at least {minimum} continuous metres, within {overlap} m. Excludes this track. Click the count to view this track and its shared tracks; the selected track is drawn thicker."
+   ],
   "filterHelp": [
     "<strong>Toutes les conditions se combinent (ET).</strong> « Entre » inclut les bornes.<br>Distances : km · D+ : m · Durées : minutes · Lieux : ordre alphabétique.",
     "<strong>All conditions are combined (AND).</strong> “Between” includes both bounds.<br>Distances: km · Elevation gain: m · Durations: minutes · Places: alphabetical order."
@@ -187,7 +201,8 @@ const dashboardI18n = (() => {
   document.querySelectorAll("[data-i18n-html]").forEach(el => {
    // Templates contain only project markup and numeric protocol parameters.
    el.innerHTML = html[el.dataset.i18nHtml][language === "fr" ? 0 : 1]
-    .replace("{margin}", String(data.asphaltTolerance)).replace("{angle}", String(data.asphaltAngle));
+     .replace("{margin}", String(data.asphaltTolerance)).replace("{angle}", String(data.asphaltAngle))
+     .replace("{overlap}", String(data.overlapTolerance)).replace("{minimum}", String(data.overlapMinLength));
   });
   bindings.forEach(({key, values}, el) => el.textContent = t(key, typeof values === "function" ? values() : values));
  }

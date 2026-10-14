@@ -39,7 +39,7 @@ jobs:
         run: python -m pip install --require-hashes -r requirements-dev.txt
       - name: Lint and syntax
         run: |
-          python -m ruff check gpx2dash.py couleurs_traces.py tableau_bord.py trajets_osrm.py goudron_osm.py denivele_gpx2elev.py version.py build.py tools test_*.py
+          python -m ruff check gpx2dash.py couleurs_traces.py tableau_bord.py trajets_osrm.py goudron_osm.py traces_communes.py denivele_gpx2elev.py version.py build.py tools test_*.py
           node --check tableau_bord.js
           node --check carte_trace.js
           node --check dashboard_i18n.js

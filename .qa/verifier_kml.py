@@ -38,6 +38,8 @@ with tempfile.TemporaryDirectory() as directory:
             "distance_goudron_m": 100 + index * 100, "goudron_incertain_m": 0,
             "lat_lon_depart": [lat, lon], "segments": geometry, "chemin_gpx": str(original),
             "itineraire_url": lien_osm((lat, lon)),
+            "traces_communes": [names[j] for j in ((1, 2), (0,), (0,), ())[index]],
+            "nombre_traces_communes": [2, 1, 1, 0][index],
         }
         results.append(result)
         track = kml.newmultigeometry(name=name)
@@ -102,7 +104,7 @@ with tempfile.TemporaryDirectory() as directory:
         assert Path(event.value.path()).read_bytes() == kml_path.read_bytes()
         page.locator(".catalogue-path").first.press("Enter")
         assert popup_title() == names[0]
-        assert page.locator(".map-popup dt").count() == 8
+        assert page.locator(".map-popup dt").count() == 9
         assert "10.0 km" in page.locator(".map-popup").inner_text()
         with page.expect_download() as event:
             page.locator(".map-popup a[download]").click()
@@ -145,6 +147,35 @@ with tempfile.TemporaryDirectory() as directory:
         assert len(routes) == 1
         page.locator("#map-close").click()
         page.locator("#reset-filters").click()
+        # Shared maps include the selected track and its direct neighbours, even if hidden by table filters.
+        page.locator("#filter-8-op").select_option(">")
+        page.locator("#filter-8-value").fill("0")
+        page.locator("#filter-2-op").select_option(">")
+        page.locator("#filter-2-value").fill("20")
+        page.locator('tr[data-id="Third track"] .shared-tracks-link').click()
+        assert page.locator("#map-dialog").is_visible()
+        assert page.locator("#trace-map").get_attribute("data-mode") == "shared"
+        assert page.locator("#map-title").inner_text() == "Traces communes : Third track"
+        assert set(page.locator(".catalogue-path").evaluate_all("paths => paths.map(p => p.dataset.traceId)")) == {names[0], names[2]}
+        widths = page.locator(".catalogue-path").evaluate_all("paths => Object.fromEntries(paths.map(p => [p.dataset.traceId, Number(p.getAttribute('stroke-width'))]))")
+        assert widths[names[2]] > widths[names[0]]
+        assert page.locator("#map-trace").is_visible()
+        assert not page.locator("#map-filter-control").is_visible()
+        assert not page.locator("#map-kml").is_visible()
+        assert not page.locator("#map-osm").is_visible()
+        assert len(routes) == 1
+        page.locator("#map-trace").click()
+        page.locator("#map-overview").click()
+        page.locator("#language").evaluate("el => {el.value='en'; el.dispatchEvent(new Event('change'));}")
+        assert page.locator("#map-title").inner_text() == "Shared tracks: Third track"
+        assert "15 m" in page.locator("#map-status").inner_text()
+        assert "100 m" in page.locator("#map-status").inner_text()
+        page.locator("#filter-2-value").evaluate("el => {el.value='99'; el.dispatchEvent(new Event('input'));}")
+        assert page.locator(".catalogue-path").count() == 2
+        page.screenshot(path=str(root / "traces_communes_desktop.png"))
+        page.keyboard.press("Escape")
+        assert not page.locator("#map-dialog").is_visible()
+        page.locator("#reset-filters").click()
         page.set_viewport_size({"width": 390, "height": 844})
         page.locator("#language").select_option("en")
         page.locator("#map-catalogue").click()
@@ -171,4 +202,4 @@ with tempfile.TemporaryDirectory() as directory:
         assert page.locator("#map-catalogue").is_disabled()
         assert not errors and not alerts, (errors, alerts)
         browser.close()
-print("Aggregated KML OK: file://, shared colours, separate segments, all/filtered/empty views, safe EN/FR details, KML/GPX downloads, single-route transition, mobile and tile failure.")
+print("Maps OK: file://, shared-track clicks, direct neighbours despite filters, EN/FR, shared colours, KML/GPX downloads, route transition, mobile and tile failure.")

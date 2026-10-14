@@ -24,7 +24,8 @@
   {name: "Durée de la trace", type: "number", unit: "min"},
   {name: "Distance de route", type: "number", unit: "km"},
   {name: "Durée de route", type: "number", unit: "min"},
-  {name: "Goudron longé (OSM)", type: "number", unit: "km"}
+   {name: "Goudron longé (OSM)", type: "number", unit: "km"},
+   {name: "Traces communes", type: "number", unit: "traces"}
  ];
  const filterControls = filterSpecs.map((spec, index) => {
   const cell = document.getElementById("column-filters").insertCell();
@@ -450,8 +451,10 @@
     cell.title = routeDate ? t("OSRM, relevé le {date}. Sans trafic en temps réel.", {date: routeDate[1]}) : t(cell.dataset.originalTitle);
     if (index === 7 && !cell.dataset.error) cell.title = t("asphaltTitle", {margin: data.asphaltTolerance, angle: data.asphaltAngle, date: cell.dataset.osmDate ? t("Données OSM du {date}.", {date: cell.dataset.osmDate}) : ""});
    }
+    cells[8].title = cells[8].dataset.error ? t(cells[8].dataset.error) :
+     t("sharedTitle", {margin: data.overlapTolerance, minimum: data.overlapMinLength});
   });
-  document.querySelector("[data-total-distance]").textContent = distance(data.totalDistance);
+   document.querySelector("[data-total-distance]").textContent = distance(data.totalDistance);
   document.querySelector("[data-total-ascent]").textContent = Math.round(data.totalAscent).toLocaleString(dashboardI18n.locale) + " m";
   message(document.getElementById("generated"), "Généré le {date} · GPX2DASH", () => ({date: new Date(data.generated).toLocaleString(dashboardI18n.locale, {dateStyle: "short", timeStyle: "short"})}));
   const missing = rows.filter(row => row.cells[5].dataset.sort === "" && row.cells[1].dataset.sort !== "").length;

@@ -1,4 +1,4 @@
-"""Vérifie les opérateurs des huit colonnes, leur combinaison et le recalcul OSRM."""
+"""Vérifie les opérateurs des neuf colonnes, leur combinaison et le recalcul OSRM."""
 import os
 from pathlib import Path
 import sys
@@ -35,6 +35,9 @@ for i, result in enumerate(results):
     result["lat_lon_depart"] = [43.30 + i / 100, 6.0 + i / 100]
     result["distance_goudron_m"] = [2432, 4010, 500, 700, 0, 0][i]
     result["goudron_incertain_m"] = [1200, 0, 0, 0, 1000, 0][i]
+    shared = [2, 4, 1, 3, None, 0][i]
+    if shared is not None:
+        result["nombre_traces_communes"] = shared
 
 cases = [
     [(0, "=", "2026-10-04", None, "AF"), (0, ">", "2026-10-04", None, "B"),
@@ -53,6 +56,8 @@ cases = [
      (6, "<", "39", None, "CF"), (6, "between", "15", "39", "AC")],
     [(7, "=", "2,4", None, "A"), (7, ">", "2.4", None, "B"),
      (7, "<", "2.4", None, "CDF"), (7, "between", "0.5", "2,4", "ACD")],
+    [(8, "=", "2", None, "A"), (8, ">", "2", None, "BD"),
+     (8, "<", "2", None, "CF"), (8, "between", "1", "3", "ACD")],
 ]
 
 def start_server(path):
@@ -84,7 +89,7 @@ try:
             "properties": {"name": "Hyères", "country": "France", "osm_value": "city"},
             "geometry": {"coordinates": [6.128, 43.119]}}]}))
         page.goto(base)
-        assert page.locator("#column-filters select").count() == 8
+        assert page.locator("#column-filters select").count() == 9
         assert page.locator("#filter-0-value").get_attribute("type") == "date"
         assert page.locator("#filter-2-value").get_attribute("inputmode") == "decimal"
         def reset():
@@ -110,7 +115,7 @@ try:
                 reset()
                 set_condition(index, operator, lower, upper)
                 expect(expected)
-        for index in range(2, 8):
+        for index in range(2, 9):
             reset()
             set_condition(index, "=", "0")
             expect("F")
@@ -120,10 +125,11 @@ try:
             (1, ">", "brignoles", None), (2, "between", "10", "15"),
             (3, "<", "600", None), (4, ">", "90", None),
             (5, "<", "50", None), (6, "between", "30", "40"), (7, "<", "3", None),
+            (8, "<", "3", None),
         ]:
             set_condition(index, operator, lower, upper)
         expect("A")
-        assert "8 conditions actives." in page.locator("#filters-status").inner_text()
+        assert "9 conditions actives." in page.locator("#filters-status").inner_text()
         page.locator("#search").fill("GAREOULT")
         expect("A")
         page.locator("#search").fill("Toulon")
@@ -185,6 +191,12 @@ try:
         set_condition(6, "=", "15")
         expect("ABCDEF")
         assert page.locator("#traces tbody tr").first.locator("td").nth(5).get_attribute("data-filter") == "10.1"
+        reset()
+        set_condition(8, "between", "0", "4")
+        page.locator('thead button[data-column="8"]').click()
+        assert visible() == [names[k] for k in "FCADB"]
+        page.locator('thead button[data-column="8"]').click()
+        assert visible() == [names[k] for k in "BDACF"]
         page.set_viewport_size({"width": 390, "height": 844})
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
         assert page.locator(".table-scroll").evaluate("el => el.scrollWidth > el.clientWidth")
@@ -192,7 +204,7 @@ try:
         page.screenshot(path=str(root / ".qa" / "filtres_mobile.png"))
         assert not errors, errors
         browser.close()
-    print("OK : 32 combinaisons colonne/opérateur, bornes inclusives, valeurs inconnues et nulles, "
+    print("OK : 36 combinaisons colonne/opérateur, bornes inclusives, valeurs inconnues et nulles, "
           "arrondis, virgules, filtres ET et recherche, tri, validation, remise à zéro, "
           "recalcul routier et mobile.")
 finally:

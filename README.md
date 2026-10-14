@@ -25,7 +25,7 @@ simplification, which defaults to 10 m with `--tolerance`.
 
 ### An HTML dashboard of the tracks
 
-The dashboard contains **one row per GPX file** and eight columns:
+The dashboard contains **one row per GPX file** and nine columns:
 
 | Column | Content |
 |---|---|
@@ -37,6 +37,7 @@ The dashboard contains **one row per GPX file** and eight columns:
 | Driving distance | Driving distance from the chosen origin to the GPX start |
 | Driving time | Estimated duration of the same drive, without live traffic |
 | Distance alongside asphalt (OSM) | Track kilometres alongside a road with an explicitly mapped bituminous surface |
+| Shared tracks | Other GPX files sharing at least 100 continuous metres within 15 m; click to open their map |
 
 Columns support **sorting** and **combined filters**: `=`, `>`, `<` or
 `Between`. A track must satisfy every active condition. For example:
@@ -127,8 +128,8 @@ elevation recalculation, routing and asphalt measurement:
 ~~~
 
 Replace `C:\path\to\gpx` with the actual path to your GPX folder, then
-double-click **dashboard.html** after the command finishes. On Linux/macOS
-use `./gpx2dash`. The bundles include Python and dependencies, so no Python
+double-click **dashboard.html** in that GPX folder after the command finishes.
+On Linux/macOS use `./gpx2dash`. The bundles include Python and dependencies, so no Python
 installation is required. You can now skip the source installation section
 and continue with [usage examples](#usage-examples).
 
@@ -166,9 +167,12 @@ python3.12 -m venv .venv
 
 Replace the example path with your GPX folder. This source command produces
 the same dashboard and KML as the bundle command. With no positional
-argument, the program uses the sibling `gpx` folder if present, otherwise
-the current directory.
-Both `.gpx` and `.GPX` are accepted. Default output names are timestamped.
+argument, the program searches the executable's folder (the script's folder
+when running from source). With a folder argument, it searches that folder.
+Search is recursive, excluding `.cache_gpx` folders and any custom cache folder.
+Both `.gpx` and `.GPX` are accepted. The cache and HTML/KML outputs are created
+in the searched folder. Default output names use that folder's name followed by
+a timestamp, for example `gpx_20261013_223000.html` and `gpx_20261013_223000.kml`.
 
 With the sources, try a **fully offline demonstration** using the synthetic example:
 
@@ -176,7 +180,7 @@ With the sources, try a **fully offline demonstration** using the synthetic exam
 .\.venv\Scripts\python.exe -X utf8 gpx2dash.py examples --from-cache --no-routing --html demonstration.html --kml demonstration.kml
 ~~~
 
-Double-click **demonstration.html**. Routing and asphalt remain unknown until
+Double-click **examples/demonstration.html**. Routing and asphalt remain unknown until
 data is downloaded. Personal GPX files, caches, screenshots and generated
 HTML/KML files are excluded by `.gitignore`.
 
@@ -195,6 +199,22 @@ installation, replace only the command prefix:
 Keep the same parameters and replace `C:\path\to\gpx` with your GPX folder
 (use a path appropriate to your system). Each example is a separate operation,
 not a sequence of required steps.
+
+To process the executable's folder and its subfolders, excluding caches:
+
+~~~powershell
+.\gpx2dash.exe
+~~~
+
+To process another folder:
+
+~~~powershell
+.\gpx2dash.exe "C:\path\to\gpx"
+~~~
+
+The cache and outputs are created in that folder. Default output names use the
+folder name and a timestamp, for example `gpx_20261013_223000.html` and
+`gpx_20261013_223000.kml`. Add `--asphalt` to download missing road surface data.
 
 ## English / French and fixed headers
 
@@ -242,8 +262,12 @@ To regenerate entirely from local data:
 .\gpx2dash.exe "C:\path\to\gpx" --from-cache --no-routing --html dashboard.html --kml tracks.kml
 ~~~
 
-Source caches default to `.cache_gpx` in the project folder. Bundles use
-`.cache_gpx` in the current directory. Set `--cache PATH` to choose another folder.
+With no folder argument, GPX files are searched recursively in the executable's
+folder (the script's folder for sources). With a folder argument, that folder is
+searched recursively. Cache directories are excluded from the search.
+The cache defaults to `.cache_gpx` inside the searched folder, and HTML/KML files
+are created there too. Relative paths passed to `--cache`, `--html` and `--kml`
+are relative to that folder; absolute paths select another location.
 The cache never empties itself: elevation profiles and DEM tiles, asphalt
 measurements, OSM road snapshots and routes are kept until `--cache-clear`,
 which removes only the files gpx2dash created in that folder.
@@ -295,6 +319,24 @@ Example: **track distance between 10 and 20 km**, **elevation gain < 600 m**,
 **driving time < 45 minutes**. Unknown values are excluded when their column
 has an active condition. Incomplete, invalid or reversed bounds are ignored
 and reported beside the filter. **Clear filters** also clears free-text search.
+
+## Shared tracks
+
+Original GPX coordinates are compared locally in metres, without downloads.
+Each other file is counted once when both tracks share at least **100 continuous
+metres**, within **15 m**, in either direction. The current track is excluded.
+Small crossings and portions separated by recording gaps are not added together.
+
+Click a **Shared tracks** count to open the selected track and its shared tracks
+on a map. The selected track is drawn thicker and each track keeps its own colour.
+Shared tracks are included even when hidden by dashboard filters. The column
+supports numeric sorting and the same operators as the other columns.
+
+Adjust the defaults with `--overlap-tolerance METRES` and
+`--overlap-min-length METRES`. Measurements are cached in
+`.cache_gpx/traces_communes_v1.json` by GPX content: renaming a file preserves
+them, removing a file removes it from the current counts and maps, and
+`--cache-clear` removes these measurements too.
 
 ## Distance alongside asphalt
 

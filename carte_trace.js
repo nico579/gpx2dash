@@ -20,10 +20,15 @@ function initialiserCarteTraces(options) {
   const element = document.createElement("span"); element.textContent = text; return element;
  }
  function fitTrace() {
+   if (active?.mode === "shared") {
+    const layer = catalogueLayer.getLayers().find(layer => layer.feature.properties.id === active.trace.id);
+    if (layer) map.fitBounds(layer.getBounds(), {padding: [28, 28], maxZoom: 16, animate: false});
+    return;
+   }
   if (traceLayer) map.fitBounds(traceLayer.getBounds(), {padding: [28, 28], maxZoom: 16, animate: false});
  }
  function fitAll() {
-  if (active?.mode === "catalogue") {
+   if (["catalogue", "shared"].includes(active?.mode)) {
    const bounds = catalogueLayer && catalogueLayer.getBounds();
    if (bounds && bounds.isValid()) map.fitBounds(bounds, {padding: [28, 28], maxZoom: 16, animate: false});
    return;
@@ -54,7 +59,7 @@ function initialiserCarteTraces(options) {
    dialog.showModal(); document.body.style.overflow = "hidden";
   }
   ensureMap();
-  map.zoomControl.setPosition(active?.mode === "catalogue" ? "bottomright" : "topleft");
+   map.zoomControl.setPosition(["catalogue", "shared"].includes(active?.mode) ? "bottomright" : "topleft");
   map.invalidateSize({pan: false});
  }
  function clearLayers() {
@@ -65,16 +70,18 @@ function initialiserCarteTraces(options) {
  }
  function setMode(mode) {
   const catalogue = mode === "catalogue";
+   const grouped = catalogue || mode === "shared";
   container.dataset.mode = mode;
   traceButton.hidden = catalogue;
   document.getElementById("map-filter-control").hidden = !catalogue;
-  document.querySelectorAll(".map-legend .road, .map-legend .gpx").forEach(el => el.hidden = catalogue);
-  document.getElementById("map-catalogue-legend").hidden = !catalogue;
-  document.getElementById("map-osm").hidden = catalogue;
+   document.querySelectorAll(".map-legend .road, .map-legend .gpx").forEach(el => el.hidden = grouped);
+   document.getElementById("map-catalogue-legend").hidden = !grouped;
+   document.getElementById("map-osm").hidden = grouped;
   const kml = document.getElementById("map-kml");
   kml.hidden = !catalogue || !data.kml;
   if (data.kml) kml.href = data.kml;
-  const label = catalogue ? "Carte interactive des traces du KML agrégé" : "Carte interactive du trajet routier et de la trace GPX";
+   const label = catalogue ? "Carte interactive des traces du KML agrégé" : mode === "shared" ?
+    "Carte de la trace et de ses traces communes" : "Carte interactive du trajet routier et de la trace GPX";
   container.setAttribute("data-i18n-aria-label", label);
   container.setAttribute("aria-label", t(label));
  }
@@ -105,7 +112,7 @@ function initialiserCarteTraces(options) {
   const stats = document.createElement("dl");
   for (const [index, label] of [[0, "Date"], [1, "Lieu de départ"], [2, "Distance de la trace"],
    [3, "Dénivelé D+ / D−"], [4, "Durée de la trace"], [5, "Distance de route"],
-   [6, "Durée de route"], [7, "Goudron longé (OSM)"]]) {
+    [6, "Durée de route"], [7, "Goudron longé (OSM)"], [8, "Traces communes"]]) {
    const term = document.createElement("dt"), value = document.createElement("dd");
    term.textContent = t(label);
    const cell = row.cells[index];
@@ -138,10 +145,16 @@ function initialiserCarteTraces(options) {
    "Aucune trace géolocalisée ne correspond aux filtres.", {n, total: mappedTraces.length});
  }
  function refreshCatalogue(fit = false) {
-  if (active?.mode !== "catalogue") return;
-  const selected = mappedTraces.filter(trace => !onlyVisible.checked || !rowById.get(trace.id).hidden);
+   if (!["catalogue", "shared"].includes(active?.mode)) return;
+   const shared = active.mode === "shared";
+   const selected = mappedTraces.filter(trace => shared ? active.ids.has(trace.id) :
+    !onlyVisible.checked || !rowById.get(trace.id).hidden);
   const ids = JSON.stringify(selected.map(trace => trace.id));
-  catalogueStatus(selected.length);
+   if (shared) {
+    document.getElementById("map-title").textContent = t("Traces communes : {name}", {name: active.trace.id});
+    message(status, "Trace sélectionnée et {n} autre(s) trace(s) partageant au moins {minimum} m, à {margin} m maximum.",
+     {n: selected.length - 1, minimum: data.overlapMinLength, margin: data.overlapTolerance});
+   } else catalogueStatus(selected.length);
   container.dataset.catalogueCount = String(selected.length);
   if (ids !== displayedIds) {
    if (catalogueLayer) catalogueLayer.remove();
@@ -150,7 +163,9 @@ function initialiserCarteTraces(options) {
     type: "Feature", properties: {id: trace.id, color: trace.color},
     geometry: {type: "MultiLineString", coordinates: trace.segments}
    }))}, {
-    style: feature => ({color: feature.properties.color, weight: 3, opacity: .9, pane: "gpx", className: "catalogue-path"}),
+     style: feature => ({color: feature.properties.color,
+      weight: shared && feature.properties.id === active.trace.id ? 6 : 3,
+      opacity: .9, pane: "gpx", className: "catalogue-path"}),
     onEachFeature: (feature, layer) => {
      const trace = traces.get(feature.properties.id);
      layer.bindTooltip(() => textNode(trace.id));
@@ -165,8 +180,9 @@ function initialiserCarteTraces(options) {
        if (event.key === "Enter" || event.key === " ") { event.preventDefault(); layer.openPopup(); }
       });
      });
-     layer.on("popupopen", () => layer.setStyle({weight: 5}));
-     layer.on("popupclose", () => layer.setStyle({weight: 3}));
+      const weight = shared && trace.id === active.trace.id ? 6 : 3;
+      layer.on("popupopen", () => layer.setStyle({weight: Math.max(5, weight)}));
+      layer.on("popupclose", () => layer.setStyle({weight}));
     }
    }).addTo(map);
   } else {
@@ -264,8 +280,34 @@ function initialiserCarteTraces(options) {
    message(status, "{error} La trace GPX reste affichée.", {error: error.message});
    fitTrace();
   }
- }
+  }
+  function openShared(trace) {
+   if (controller) controller.abort();
+   controller = null;
+   active = {mode: "shared", trace, ids: new Set([trace.id, ...(trace.sharedIds || [])])};
+   document.getElementById("map-title").removeAttribute("data-i18n");
+   message(document.getElementById("map-origin"), "La trace sélectionnée est dessinée plus épaisse.");
+   const original = rowById.get(trace.id).querySelector(".trace-name a[download]");
+   const download = document.getElementById("map-download");
+   download.hidden = !original;
+   if (original) download.href = original.href;
+   setMode("shared");
+   showDialog(); clearLayers();
+   container.dataset.traceId = trace.id;
+   container.dataset.road = "none";
+   delete container.dataset.origin;
+   noteTiles(); refreshCatalogue(true);
+   }
  table.addEventListener("click", event => {
+   const shared = event.target.closest(".shared-tracks-link");
+   if (shared) {
+    const trace = traces.get(shared.closest("tr").dataset.id);
+    if (trace && trace.segments.length) {
+     event.preventDefault();
+     try { openShared(trace); } catch (error) { mapError(error); }
+    }
+    return;
+   }
   const link = event.target.closest(".route-link");
   if (!link || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
   const row = link.closest("tr"), trace = traces.get(row.dataset.id);

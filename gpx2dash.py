@@ -23,6 +23,8 @@ from goudron_osm import (MARGE_GOUDRON, ANGLE_GOUDRON, SERVEUR_OVERPASS,
                          ajouter_goudron_osm, parametres_valides)
 from trajets_osrm import (DEPART_GAREOULT, SERVEUR_OSRM, ajouter_trajets_osrm,
                           chercher_villes, coordonnees, serveur_valide)
+from traces_communes import (MARGE_COMMUNE, LONGUEUR_COMMUNE, FICHIER_CACHE_COMMUN,
+                            ajouter_traces_communes, parametres_valides as parametres_communs_valides)
 
 DOSSIER_CACHE = ".cache_gpx"
 # Une entrée par contenu GPX (empreinte SHA-256), quel que soit le nom du fichier.
@@ -212,7 +214,8 @@ def vider_cache(dossier):
     dossier = Path(dossier)
     if not dossier.is_dir():
         return 0
-    cibles = [dossier / nom for nom in ("gpx2elev", "goudron_osm", "goudron_osm_v1.json", "trajets_osrm_v1.json")]
+    cibles = [dossier / nom for nom in ("gpx2elev", "goudron_osm", "goudron_osm_v1.json",
+                                       "trajets_osrm_v1.json", FICHIER_CACHE_COMMUN)]
     cibles += [*dossier.glob(f"*_{VERSION_CACHE}.json"),
                *dossier.glob(f"*_tol*_{ANCIENNE_VERSION_CACHE}.json"), *dossier.glob("*.part")]
     supprimes = 0
@@ -232,15 +235,26 @@ def fusionner_gpx_vers_kml_parallele(dossier_entree, fichier_sortie, tolerance_m
                                     dossier_cache=None, statistiques_cache=False, serveur_osrm=SERVEUR_OSRM,
                                     goudron_en_ligne=False, marge_goudron=MARGE_GOUDRON,
                                     angle_goudron=ANGLE_GOUDRON, serveur_overpass=SERVEUR_OVERPASS,
-                                    langue=None):
+                                    langue=None, marge_commune=MARGE_COMMUNE,
+                                    longueur_commune=LONGUEUR_COMMUNE):
     """Produit le KML et son tableau HTML, à partir des mêmes statistiques GPX."""
-    fichiers_gpx = sorted(str(fichier) for fichier in Path(dossier_entree).iterdir()
-                          if fichier.is_file() and fichier.suffix.lower() == '.gpx')
+    dossier_entree = Path(dossier_entree).resolve()
+    dossier_cache = Path(dossier_cache or dossier_entree / DOSSIER_CACHE).resolve()
+    fichiers_gpx = []
+    for racine, sous_dossiers, noms in os.walk(dossier_entree):
+        # Ne pas parcourir les caches, même lorsqu'ils contiennent des GPX.
+        sous_dossiers[:] = [nom for nom in sous_dossiers
+                            if nom.casefold() != DOSSIER_CACHE.casefold()
+                            and (Path(racine) / nom).resolve() != dossier_cache]
+        for nom in noms:
+            fichier = Path(racine) / nom
+            if fichier.suffix.lower() == '.gpx' and fichier.is_file():
+                fichiers_gpx.append(str(fichier))
+    fichiers_gpx.sort()
     if not fichiers_gpx:
         print("Erreur : Aucun fichier GPX trouvé.")
         return
 
-    dossier_cache = Path(dossier_cache or Path(dossier_entree) / DOSSIER_CACHE)
     dossier_cache.mkdir(parents=True, exist_ok=True)
     options = {
         "dossier_cache": str(dossier_cache),
@@ -262,6 +276,13 @@ def fusionner_gpx_vers_kml_parallele(dossier_entree, fichier_sortie, tolerance_m
                             total=len(a_traiter), desc="Parsing GPX & simplification", ncols=100)
             for i, res in zip(a_traiter, traitees):
                 resultats[i] = res
+
+    # Deux sous-dossiers peuvent contenir une trace du même nom : chaque trace
+    # doit garder son propre identifiant dans le tableau et sur la carte.
+    noms = Counter(res['nom'] for res in resultats)
+    for fichier, res in zip(fichiers_gpx, resultats):
+        if noms[res['nom']] > 1:
+            res['nom'] = Path(fichier).relative_to(dossier_entree).with_suffix('').as_posix()
 
     print("\nIdentification des villes...")
     coords_a_chercher = []
@@ -296,6 +317,16 @@ def fusionner_gpx_vers_kml_parallele(dossier_entree, fichier_sortie, tolerance_m
     if bilan_goudron["erreur_cache"]:
         print("Cache goudron non enregistré : " + bilan_goudron["erreur_cache"])
 
+    print("Comparaison des portions communes entre traces GPX...")
+    with tqdm(total=len(resultats), desc="Traces communes / cache", ncols=100) as barre:
+        bilan_commun = ajouter_traces_communes(
+            resultats, dossier_cache=dossier_cache, marge=marge_commune,
+            longueur=longueur_commune, tolerance_geometrie=tolerance_m, progression=barre.update)
+    print(f"Portions communes : {bilan_commun['cache']} comparaisons depuis le cache, "
+          f"{bilan_commun['calcules']} calculées, {bilan_commun['erreurs']} non calculées.")
+    if bilan_commun["erreur_cache"]:
+        print("Cache des portions communes non enregistré : " + bilan_commun["erreur_cache"])
+
     for res in resultats:
         if res.pop('cache_a_jour', False):
             continue
@@ -325,7 +356,9 @@ def fusionner_gpx_vers_kml_parallele(dossier_entree, fichier_sortie, tolerance_m
         # évite le trait droit parasite entre segments (pause d'enregistrement).
         trace = kml.newmultigeometry(name=nom_complet)
         for cle in ('distance_goudron_m',
-                    'goudron_incertain_m', 'goudron_marge_m', 'goudron_angle_deg'):
+                    'goudron_incertain_m', 'goudron_marge_m', 'goudron_angle_deg',
+                    'nombre_traces_communes', 'traces_communes',
+                    'superposition_marge_m', 'superposition_min_m'):
             trace.extendeddata.newdata(cle, json.dumps(res.get(cle), ensure_ascii=False))
         for segment in res['segments']:
             trace.newlinestring(coords=segment)
@@ -361,7 +394,8 @@ def fusionner_gpx_vers_kml_parallele(dossier_entree, fichier_sortie, tolerance_m
         generer_tableau_bord(resultats, fichier_html, libelle_origine=libelle_origine,
                              origine_route=origine_route, serveur_osrm=serveur_osrm,
                              marge_goudron=marge_goudron, angle_goudron=angle_goudron, langue=langue,
-                             fichier_kml=fichier_sortie if kml_enregistre else None)
+                             fichier_kml=fichier_sortie if kml_enregistre else None,
+                             marge_commune=marge_commune, longueur_commune=longueur_commune)
         print(f"Tableau de bord HTML : {fichier_html} ({len(resultats)} traces)")
     except OSError as e:
         print(f"Erreur HTML : {e}")
@@ -373,18 +407,16 @@ def fusionner_gpx_vers_kml_parallele(dossier_entree, fichier_sortie, tolerance_m
 def main():
     parser = argparse.ArgumentParser(description="Combine GPX tracks into a KML and a standalone bilingual HTML dashboard.")
     base = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
-    sibling = base.parent / "gpx"
-    parser.add_argument("folder", nargs="?", default=str(sibling) if sibling.is_dir() else ".",
-                        help="GPX folder (default: sibling gpx folder, otherwise current directory).")
+    parser.add_argument("folder", nargs="?", default=str(base),
+                        help="GPX folder, searched recursively excluding caches (default: executable or script folder).")
     parser.add_argument("--version", action="version", version=f"gpx2dash {VERSION}")
-    parser.add_argument("--cache", default=str((Path.cwd() if getattr(sys, "frozen", False) else base) / DOSSIER_CACHE),
-                        help="Working cache folder.")
+    parser.add_argument("--cache", help="Cache folder, relative to the GPX folder unless absolute (default: .cache_gpx).")
     parser.add_argument("--from-cache", action="store_true",
                         help="Reuse verified statistics; use local elevation data or filtered GPX if absent. No elevation downloads.")
     parser.add_argument("--cache-clear", action="store_true",
                         help="Empty the cache folder first, so every track is processed and downloaded again. The cache never empties itself.")
-    parser.add_argument("--kml", help="Output KML file.")
-    parser.add_argument("--html", help="Output HTML dashboard file.")
+    parser.add_argument("--kml", help="Output KML file, relative to the GPX folder unless absolute.")
+    parser.add_argument("--html", help="Output HTML dashboard file, relative to the GPX folder unless absolute.")
     parser.add_argument("--no-routing", action="store_true", help="Use the routing cache only; no OSRM requests from Python.")
     parser.add_argument("--osrm-server", default=SERVEUR_OSRM, help="OSRM driving server URL.")
     parser.add_argument("--asphalt", action="store_true", help="Download nearby OSM roads to measure asphalt alongside tracks; otherwise use cache only.")
@@ -392,6 +424,10 @@ def main():
                         help="Maximum distance to the OSM road axis (1-50 m, default: 15).")
     parser.add_argument("--asphalt-angle", type=float, default=ANGLE_GOUDRON, metavar="DEGREES",
                         help="Maximum direction difference, either direction (1-60 degrees, default: 30).")
+    parser.add_argument("--overlap-tolerance", type=float, default=MARGE_COMMUNE, metavar="METRES",
+                        help="Maximum separation for shared GPX portions (1-100 m, default: 15).")
+    parser.add_argument("--overlap-min-length", type=float, default=LONGUEUR_COMMUNE, metavar="METRES",
+                        help="Minimum continuous shared portion in each GPX (default: 100 m).")
     parser.add_argument("--overpass-server", default=SERVEUR_OVERPASS, help="Overpass API URL for road surfaces.")
     parser.add_argument("--origin-city", help="Find the initial driving origin with Photon.")
     parser.add_argument("--origin", nargs=2, type=float, metavar=("LAT", "LON"), default=DEPART_GAREOULT,
@@ -417,13 +453,17 @@ def main():
     ]:
         parser.add_argument(old, dest=dest, help=argparse.SUPPRESS, default=argparse.SUPPRESS, **kw)
     args = parser.parse_args()
-    if not Path(args.folder).is_dir():
+    dossier = Path(args.folder).resolve()
+    if not dossier.is_dir():
         parser.error("The GPX folder does not exist.")
+    args.folder = str(dossier)
+    args.cache = str((dossier / (args.cache or DOSSIER_CACHE)).resolve())
     try:
         args.origin = coordonnees(args.origin)
         args.osrm_server = serveur_valide(args.osrm_server)
         args.overpass_server = serveur_valide(args.overpass_server)
         parametres_valides(args.asphalt_tolerance, args.asphalt_angle)
+        parametres_communs_valides(args.overlap_tolerance, args.overlap_min_length)
         if args.origin_city:
             cities = chercher_villes(args.origin_city)
             if not cities:
@@ -438,8 +478,9 @@ def main():
     if args.cache_clear and args.from_cache:
         parser.error("--cache-clear and --from-cache cannot be combined.")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    kml = args.kml or f"tracks_{timestamp}.kml"
-    html = args.html or f"dashboard_{timestamp}.html"
+    nom_sortie = f"{dossier.name or 'gpx'}_{timestamp}"
+    kml = str((dossier / (args.kml or f"{nom_sortie}.kml")).resolve())
+    html = str((dossier / (args.html or f"{nom_sortie}.html")).resolve())
     if Path(kml).resolve() == Path(html).resolve():
         parser.error("KML and HTML outputs must be different files.")
     Path(kml).resolve().parent.mkdir(parents=True, exist_ok=True)
@@ -452,6 +493,7 @@ def main():
         dossier_cache=args.cache, statistiques_cache=args.from_cache, serveur_osrm=args.osrm_server,
         goudron_en_ligne=args.asphalt, marge_goudron=args.asphalt_tolerance,
         angle_goudron=args.asphalt_angle, serveur_overpass=args.overpass_server, langue=args.language,
+        marge_commune=args.overlap_tolerance, longueur_commune=args.overlap_min_length,
     )
 
 

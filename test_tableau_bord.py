@@ -1,9 +1,11 @@
 """Contrôles du tableau HTML et des trajets OSRM, sans accès réseau réel."""
+from contextlib import chdir
 from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
 from io import BytesIO
 import json
 from pathlib import Path
+import re
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -49,6 +51,63 @@ class Table(HTMLParser):
             self.current = None
         if tag == "tbody":
             self.in_body = False
+
+
+class CLITests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        self.application = self.root / "application"
+        self.terminal = self.root / "terminal"
+        self.tracks = self.root / "traces GPX"
+        for folder in (self.application, self.terminal, self.tracks, self.root / "gpx"):
+            folder.mkdir()
+
+    def assert_default_paths(self, generate, folder):
+        self.assertEqual(generate.call_args.args[0], str(folder))
+        kml = Path(generate.call_args.args[1])
+        html = Path(generate.call_args.kwargs["fichier_html"])
+        self.assertEqual(kml.parent, folder)
+        self.assertEqual(html.parent, folder)
+        self.assertRegex(kml.name, rf"^{re.escape(folder.name)}_\d{{8}}_\d{{6}}\.kml$")
+        self.assertEqual(html.stem, kml.stem)
+        self.assertEqual(html.suffix, ".html")
+        self.assertEqual(generate.call_args.kwargs["dossier_cache"], str(folder / ".cache_gpx"))
+
+    def test_no_folder_uses_executable_or_script_directory(self):
+        for frozen in (False, True):
+            with self.subTest(frozen=frozen), chdir(self.terminal), \
+                    patch.object(gpx2dash.sys, "frozen", frozen, create=True), \
+                    patch.object(gpx2dash.sys, "executable", str(self.application / "gpx2dash.exe")), \
+                    patch.object(gpx2dash, "__file__", str(self.application / "gpx2dash.py")), \
+                    patch("sys.argv", ["gpx2dash"]), \
+                    patch.object(gpx2dash, "fusionner_gpx_vers_kml_parallele") as generate:
+                gpx2dash.main()
+            self.assert_default_paths(generate, self.application)
+
+    def test_explicit_folder_owns_default_cache_and_outputs(self):
+        for argument in (str(self.tracks), "../traces GPX"):
+            with self.subTest(folder=argument), chdir(self.terminal), \
+                    patch("sys.argv", ["gpx2dash", argument]), \
+                    patch.object(gpx2dash, "fusionner_gpx_vers_kml_parallele") as generate:
+                gpx2dash.main()
+            self.assert_default_paths(generate, self.tracks)
+
+    def test_relative_and_absolute_cache_and_output_overrides(self):
+        for absolute in (False, True):
+            paths = [Path("cache perso"), Path("sorties/traces.kml"), Path("sorties/tableau.html")]
+            if absolute:
+                paths = [self.root / "ailleurs" / path for path in paths]
+            cache, kml, html = map(str, paths)
+            with self.subTest(absolute=absolute), chdir(self.terminal), \
+                    patch("sys.argv", ["gpx2dash", "../traces GPX", "--cache", cache,
+                                       "--kml", kml, "--html", html]), \
+                    patch.object(gpx2dash, "fusionner_gpx_vers_kml_parallele") as generate:
+                gpx2dash.main()
+            self.assertEqual(generate.call_args.args, (str(self.tracks), str(self.tracks / paths[1])))
+            self.assertEqual(generate.call_args.kwargs["fichier_html"], str(self.tracks / paths[2]))
+            self.assertEqual(generate.call_args.kwargs["dossier_cache"], str(self.tracks / paths[0]))
 
 
 class DashboardTests(unittest.TestCase):
@@ -131,7 +190,7 @@ class DashboardTests(unittest.TestCase):
             html = output.read_text(encoding="utf-8")
         table = Table(html)
         self.assertEqual(len(table.rows), 3)
-        self.assertTrue(all(len(row) == 8 for row in table.rows))
+        self.assertTrue(all(len(row) == 9 for row in table.rows))
         self.assertIn("Trace illisible", table.rows[0][1])
         self.assertIn("22,3 km", table.rows[1][2])
         self.assertIn("+735 m", table.rows[1][3])
@@ -167,6 +226,31 @@ class DashboardTests(unittest.TestCase):
             output = generer_tableau_bord([], Path(directory) / "empty.html")
             self.assertEqual(len(Table(output.read_text(encoding="utf-8")).rows), 0)
 
+    def test_same_filename_in_subfolders_keeps_both_traces_on_map(self):
+        import concurrent.futures
+        import reverse_geocoder
+        from denivele_gpx2elev import calculer_denivele
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            for name, lat in (("nord", 44), ("sud", 43)):
+                subfolder = folder / name
+                subfolder.mkdir()
+                (subfolder / "trace.gpx").write_text(
+                    f'<gpx><trk><trkseg><trkpt lat="{lat}" lon="6"><ele>100</ele></trkpt>'
+                    f'<trkpt lat="{lat}" lon="6.001"><ele>110</ele></trkpt></trkseg></trk></gpx>',
+                    encoding="utf-8")
+            with patch.object(gpx2dash, "calculer_denivele",
+                              side_effect=lambda raw, cache: calculer_denivele(raw, cache, online=False)), \
+                    patch.object(gpx2dash.concurrent.futures, "ProcessPoolExecutor", concurrent.futures.ThreadPoolExecutor), \
+                    patch.object(reverse_geocoder, "search", return_value=[{"name": "Test"}] * 2):
+                results = gpx2dash.fusionner_gpx_vers_kml_parallele(
+                    folder, folder / "out.kml", routes_en_ligne=False)
+            self.assertEqual({result["nom"] for result in results}, {"nord/trace", "sud/trace"})
+            html = (folder / "out.html").read_text(encoding="utf-8")
+            start = html.index('type="application/json">') + len('type="application/json">')
+            payload = json.loads(html[start:html.index("</script>", start)])
+            self.assertEqual({trace["id"] for trace in payload["traces"]}, {"nord/trace", "sud/trace"})
+
     def test_full_kml_and_html_pipeline_without_network(self):
         import concurrent.futures
         import reverse_geocoder
@@ -175,12 +259,19 @@ class DashboardTests(unittest.TestCase):
             return calculer_denivele(raw, cache, online=False)
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory)
-            (folder / "2026-10-04.GPX").write_text('<gpx><trk><trkseg><trkpt lat="43" lon="6"><ele>100</ele></trkpt><trkpt lat="43" lon="6.001"><ele>110</ele></trkpt></trkseg></trk></gpx>', encoding="utf-8")
+            nested = folder / "2026" / "automne"
+            nested.mkdir(parents=True)
+            (nested / "2026-10-04.GPX").write_text('<gpx><trk><trkseg><trkpt lat="43" lon="6"><ele>100</ele></trkpt><trkpt lat="43" lon="6.001"><ele>110</ele></trkpt></trkseg></trk></gpx>', encoding="utf-8")
             (folder / "2026-10-05.gpx").write_text("invalid GPX", encoding="utf-8")
+            cache = folder / "archives" / "cache perso"
+            for excluded in (folder / ".cache_gpx", nested / ".cache_gpx", cache):
+                (excluded / "sous-dossier").mkdir(parents=True)
+                (excluded / "sous-dossier" / "ignore.GPX").write_text("invalid cached GPX", encoding="utf-8")
             with patch.object(gpx2dash, "calculer_denivele", offline), \
                     patch.object(gpx2dash.concurrent.futures, "ProcessPoolExecutor", concurrent.futures.ThreadPoolExecutor), \
                     patch.object(reverse_geocoder, "search", return_value=[{"name": "Test"}]):
-                gpx2dash.fusionner_gpx_vers_kml_parallele(directory, folder / "out.kml", routes_en_ligne=False)
+                gpx2dash.fusionner_gpx_vers_kml_parallele(directory, folder / "out.kml",
+                                                       dossier_cache=cache, routes_en_ligne=False)
             self.assertTrue((folder / "out.kml").is_file())
             html = (folder / "out.html").read_text(encoding="utf-8")
             table = Table(html)
@@ -195,6 +286,8 @@ class DashboardTests(unittest.TestCase):
             html_color = payload["traces"][0]["color"].lstrip("#")
             self.assertEqual(kml_color, "ff" + html_color[4:6] + html_color[2:4] + html_color[:2])
             self.assertEqual(len(table.rows), 2)
+            self.assertEqual(len(list(cache.glob(f"*_{gpx2dash.VERSION_CACHE}.json"))), 2)
+            self.assertEqual(payload["traces"][0]["id"], "2026-10-04")
             self.assertTrue(any(link.startswith("https://www.openstreetmap.org/directions?") for link in table.links))
 
 

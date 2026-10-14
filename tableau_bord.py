@@ -11,6 +11,7 @@ from urllib.parse import quote
 from couleurs_traces import couleur_html
 from goudron_osm import MARGE_GOUDRON, ANGLE_GOUDRON
 from trajets_osrm import DEPART_GAREOULT, SERVEUR_OSRM, GEOCODEUR, CHAMPS_ROUTE, cle_trajet, coordonnees
+from traces_communes import MARGE_COMMUNE, LONGUEUR_COMMUNE
 
 
 def extraire_date(gpx, nom_trace):
@@ -112,6 +113,21 @@ def _lien_fichier(chemin, dossier_sortie):
         return Path(chemin).resolve().as_uri()
 
 
+def _cellule_traces_communes(resultat):
+    nombre = _nombre(resultat.get("nombre_traces_communes"))
+    erreur = resultat.get("erreur_traces_communes") or ("Comparaison non calculée." if nombre is None else "")
+    contenu = "—" if nombre is None else str(int(nombre))
+    if nombre and resultat.get("traces_communes") and resultat.get("segments"):
+        contenu = (f'<button type="button" class="shared-tracks-link" aria-haspopup="dialog"'
+                   f' aria-controls="map-dialog" aria-label="Afficher la trace et ses traces communes"'
+                   f' data-i18n-aria-label="Afficher la trace et ses traces communes">{contenu}</button>')
+    titre = erreur or (f"Autres traces partageant au moins {resultat.get('superposition_min_m', LONGUEUR_COMMUNE):g} m "
+                      f"continus, à {resultat.get('superposition_marge_m', MARGE_COMMUNE):g} m maximum. "
+                      "La trace elle-même n'est pas comptée. Cliquer pour afficher les parcours communs.")
+    return _cellule(nombre, contenu, "numeric shared-tracks", titre=titre).replace(
+        '<td ', f'<td data-error="{escape(str(erreur), quote=True)}" ', 1)
+
+
 def _segments_carte(resultat):
     """Coordonnées lon/lat, sans relier les interruptions du GPX."""
     segments = []
@@ -129,7 +145,8 @@ def _segments_carte(resultat):
 def generer_tableau_bord(resultats, fichier_sortie, *, libelle_origine="Mairie de Garéoult",
                          origine_route=DEPART_GAREOULT, serveur_osrm=SERVEUR_OSRM,
                          marge_goudron=MARGE_GOUDRON, angle_goudron=ANGLE_GOUDRON, langue=None,
-                         fichier_kml=None):
+                         fichier_kml=None, marge_commune=MARGE_COMMUNE,
+                         longueur_commune=LONGUEUR_COMMUNE):
     """Une ligne par fichier ; recherche, tri et filtres locaux, routage sur demande."""
     if langue not in (None, "en", "fr"):
         raise ValueError("Language must be en or fr.")
@@ -182,6 +199,7 @@ def generer_tableau_bord(resultats, fichier_sortie, *, libelle_origine="Mairie d
             _cellule(_nombre(res.get("distance_route_m")), _distance(res.get("distance_route_m")), titre=titre_route, unite_filtre="km"),
             _cellule(_nombre(res.get("duree_route_s")), _duree(res.get("duree_route_s")), titre=titre_route, unite_filtre="min"),
             _cellule_goudron(res),
+            _cellule_traces_communes(res),
         ]
         lignes.append(f'<tr data-id="{escape(nom, quote=True)}"'
                       f' data-uncertain="{_nombre(res.get("goudron_incertain_m")) or 0}">' + "".join(cellules) + '</tr>')
@@ -205,13 +223,14 @@ def generer_tableau_bord(resultats, fichier_sortie, *, libelle_origine="Mairie d
             continue
         nom = str(res.get("nom", "Trace"))
         traces.append({"id": nom, "position": position, "segments": _segments_carte(res),
-                       "color": couleur_html(nom)})
+                       "color": couleur_html(nom), "sharedIds": res.get("traces_communes", [])})
         if res.get("date_route"):
             cache[cle_trajet(position, origine_route, serveur_osrm)] = {
                 cle: res[cle] for cle in CHAMPS_ROUTE if cle in res
             }
     donnees = json.dumps({
         "language": langue, "asphaltTolerance": marge_goudron, "asphaltAngle": angle_goudron,
+        "overlapTolerance": marge_commune, "overlapMinLength": longueur_commune,
         "kml": _lien_fichier(fichier_kml, sortie.parent) if fichier_kml else None,
         "totalDistance": total_distance, "totalAscent": total_denivele, "errors": erreurs,
         "generated": datetime.now().astimezone().isoformat(),
@@ -227,6 +246,8 @@ def generer_tableau_bord(resultats, fichier_sortie, *, libelle_origine="Mairie d
     valeurs = {
         "MARGEGOUDRON": f"{marge_goudron:g}",
         "ANGLEGOUDRON": f"{angle_goudron:g}",
+        "MARGECOMMUNE": f"{marge_commune:g}",
+        "LONGUEURCOMMUNE": f"{longueur_commune:g}",
         "ORIGINE": escape(libelle_origine),
         "VILLE": escape("Garéoult" if libelle_origine == "Mairie de Garéoult" else libelle_origine, quote=True),
         "DONNEES": donnees,

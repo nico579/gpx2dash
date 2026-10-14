@@ -183,11 +183,12 @@ class ElevationTests(unittest.TestCase):
     def test_cache_clear_removes_only_gpx2dash_files(self):
         cache = self.directory / 'cache'
         for name in ('gpx2elev/tiles/t.webp', 'gpx2elev/profiles/p.profile', 'goudron_osm/a.json',
-                     'goudron_osm_v1.json', 'trajets_osrm_v1.json', f'{"0" * 64}_{agreg.VERSION_CACHE}.json',
+                     'goudron_osm_v1.json', 'trajets_osrm_v1.json', agreg.FICHIER_CACHE_COMMUN,
+                     f'{"0" * 64}_{agreg.VERSION_CACHE}.json',
                      f'trace_tol10_{agreg.ANCIENNE_VERSION_CACHE}.json', 'tmp1234.part', 'notes.txt', 'trace.gpx'):
             (cache / name).parent.mkdir(parents=True, exist_ok=True)
             (cache / name).write_text('x', encoding='utf-8')
-        self.assertEqual(agreg.vider_cache(cache), 7)
+        self.assertEqual(agreg.vider_cache(cache), 8)
         self.assertEqual(sorted(p.name for p in cache.iterdir()), ['notes.txt', 'trace.gpx'])
 
     def test_cache_clear_cannot_be_combined_with_from_cache(self):

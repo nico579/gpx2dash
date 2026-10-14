@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -22,8 +23,8 @@ def main():
     args = parser.parse_args()
     command = [str(Path(args.executable).resolve())] if args.executable else [sys.executable, str(Path(__file__).resolve().parent.parent / "gpx2dash.py")]
     env = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
-    def run(arguments, cwd):
-        result = subprocess.run(command + arguments, cwd=cwd, env=env, text=True, encoding="utf-8",
+    def run(arguments, cwd, launch=None):
+        result = subprocess.run((launch or command) + arguments, cwd=cwd, env=env, text=True, encoding="utf-8",
                                 errors="replace", stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=180)
         if result.returncode:
             raise AssertionError(result.stdout)
@@ -32,15 +33,20 @@ def main():
         root = Path(directory)
         folder = root / "gpx"
         folder.mkdir()
-        cache = root / "cache"
+        cache = folder / "archives" / ".cache_gpx"
         (cache / "goudron_osm").mkdir(parents=True)
+        nested = folder / "2026" / "janvier"
+        nested.mkdir(parents=True)
+        for excluded in (folder / ".cache_gpx", nested / ".cache_gpx", cache):
+            (excluded / "nested").mkdir(parents=True, exist_ok=True)
+            (excluded / "nested" / "ignored.GPX").write_text("invalid cached GPX", encoding="utf-8")
         timestamp = datetime.now(timezone.utc).isoformat()
         manifest = {"version": 1, "mesures": {}, "sources": {}}
         routes = {}
         originals = {}
         for index in range(2):
             lat = 43.3293 + index * .00005
-            filename = folder / f"2026-01-0{index + 1}.gpx"
+            filename = (folder if index == 0 else nested) / f"2026-01-0{index + 1}.GPX"
             points = "".join(f'<trkpt lat="{lat}" lon="{lon}"><ele>{330 + i * 5}</ele><time>2026-01-01T08:0{i}:00Z</time></trkpt>'
                              for i, lon in enumerate((6.0458, 6.0470, 6.0483)))
             raw = ('<gpx version="1.1" creator="synthetic CI fixture"><trk><trkseg>' + points + '</trkseg></trk></gpx>').encode()
@@ -70,6 +76,10 @@ def main():
             data = json.loads(content[start:content.index("</script>", start)])
             assert data["language"] == language and len(data["traces"]) == 2
             assert data["kml"] == kml.name
+            assert data["overlapTolerance"] == 15 and data["overlapMinLength"] == 100
+            assert all(trace["sharedIds"] == [other["id"] for other in data["traces"] if other != trace]
+                       for trace in data["traces"])
+            assert content.count('class="shared-tracks-link"') == 2
             assert all(trace["color"].startswith("#") and len(trace["color"]) == 7 for trace in data["traces"])
             assert 'id="map-catalogue"' in content and 'id="map-only-visible"' in content
             assert 'id="language"' in content and "position: sticky" in content
@@ -87,11 +97,43 @@ def main():
                 assert measure["goudron_incertain_m"] == 0
             assert "10,0 km" in content
         assert all(path.read_bytes() == raw for path, raw in originals.items())
-        # The default working cache must be writable in cwd, never inside frozen resources.
+        # Relative overrides and defaults belong to the input folder, even from a different cwd.
+        run([folder.name, "--from-cache", "--no-routing", "--cache", "archives/.cache_gpx",
+             "--html", "outputs/relative.html", "--kml", "outputs/relative.kml"], root)
+        assert (folder / "outputs/relative.html").is_file()
+        assert (folder / "outputs/relative.kml").is_file()
+        run([folder.name, "--from-cache", "--no-routing"], root)
+        dashboards = list(folder.glob(f"{folder.name}_*.html"))
+        assert len(dashboards) == 1
+        assert dashboards[0].with_suffix(".kml").is_file()
+        assert len(list((folder / ".cache_gpx").glob(f"*_{VERSION_CACHE}.json"))) == 2
+        assert not (root / ".cache_gpx").exists()
+        # Launch without a folder from elsewhere: the executable/script directory owns everything.
+        application = root / "application"
+        application.mkdir()
         if args.executable:
-            run([str(folder), "--from-cache", "--no-routing", "--html", "default.html", "--kml", "default.kml"], root)
-            assert (root / ".cache_gpx").is_dir()
-    print("Executable smoke passed: EN/FR, GPX unchanged, KML/HTML, spawn workers, geocoder, native geometry and cache.")
+            executable = Path(command[0])
+            shutil.copy2(executable, application / executable.name)
+            shutil.copytree(executable.parent / "_internal", application / "_internal", symlinks=True)
+            launch = [str(application / executable.name)]
+        else:
+            script = Path(command[1])
+            shutil.copy2(script, application / script.name)
+            env["PYTHONPATH"] = str(script.parent) + os.pathsep + env.get("PYTHONPATH", "")
+            launch = [sys.executable, str(application / script.name)]
+        for path, raw in originals.items():
+            target = application / "tracks" / "nested" / path.name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(raw)
+        ignored = application / ".cache_gpx" / "ignored.gpx"
+        ignored.parent.mkdir()
+        ignored.write_text("invalid cached GPX", encoding="utf-8")
+        run(["--from-cache", "--no-routing"], root, launch)
+        dashboards = list(application.glob("application_*.html"))
+        assert len(dashboards) == 1 and dashboards[0].with_suffix(".kml").is_file()
+        assert len(list(ignored.parent.glob(f"*_{VERSION_CACHE}.json"))) == 2
+        assert not (root / ".cache_gpx").exists()
+    print("Executable smoke passed: EN/FR, recursive GPX, excluded caches, folder-relative paths, GPX unchanged, KML/HTML, spawn workers, geocoder and native geometry.")
 
 
 if __name__ == "__main__":

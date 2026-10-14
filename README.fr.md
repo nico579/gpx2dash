@@ -28,7 +28,7 @@ défaut avec `--tolerance`.
 
 ### Un tableau de bord HTML des traces
 
-Le tableau contient **une ligne par fichier GPX** et huit colonnes :
+Le tableau contient **une ligne par fichier GPX** et neuf colonnes :
 
 | Colonne | Contenu |
 |---|---|
@@ -40,6 +40,7 @@ Le tableau contient **une ligne par fichier GPX** et huit colonnes :
 | Distance routière | Distance en voiture depuis l'origine choisie jusqu'au départ du GPX |
 | Durée de route | Durée estimée du même trajet, sans trafic en temps réel |
 | Goudron longé (OSM) | Kilomètres du parcours longeant une voie au revêtement bitumineux renseigné |
+| Traces communes | Nombre d'autres GPX partageant au moins 100 m continus, avec une tolérance de 15 m ; cliquer pour ouvrir leur carte |
 
 Les colonnes permettent le **tri** et des **filtres combinables** : `=`, `>`,
 `<` ou `Entre`. Toutes les conditions actives doivent être satisfaites.
@@ -133,7 +134,8 @@ avec recalcul du dénivelé, routage et mesure du goudron :
 ~~~
 
 Remplacer `C:\chemin\vers\gpx` par le chemin réel de ton dossier GPX, puis
-ouvrir **tableau_bord.html** par double-clic une fois la commande terminée.
+ouvrir **tableau_bord.html** dans ce dossier GPX par double-clic une fois la
+commande terminée.
 Sous Linux/macOS, utiliser `./gpx2dash`. Le bundle contient Python et ses
 dépendances : aucune installation de Python n'est nécessaire.
 Passer directement aux [commandes d'utilisation](#commandes-dutilisation),
@@ -169,7 +171,8 @@ Pour générer le même catalogue qu'avec le bundle, à partir de ton dossier GP
 
 Remplacer `C:\chemin\vers\gpx` par le chemin réel de ton dossier GPX.
 Cette commande produit le même tableau et le même KML que celle du bundle.
-Le script affiche sa progression. Double-cliquer ensuite sur **tableau_bord.html**.
+Le script affiche sa progression. Double-cliquer ensuite sur **tableau_bord.html**
+dans ce dossier GPX.
 
 Sous Linux ou macOS, remplacer les commandes de l'environnement par :
 
@@ -185,7 +188,7 @@ Avec les sources, essayer le script **sans appel réseau**, avec l'exemple synth
 .\.venv\Scripts\python.exe -X utf8 gpx2dash.py examples --from-cache --no-routing --html demonstration.html --kml demonstration.kml
 ~~~
 
-Ouvrir **demonstration.html**. Les colonnes routières et le goudron restent
+Ouvrir **examples/demonstration.html**. Les colonnes routières et le goudron restent
 inconnus tant que leurs données ne sont pas téléchargées.
 
 Le dépôt contient le code et cet exemple synthétique. Les GPX personnels,
@@ -292,6 +295,26 @@ n'est pas appliquée ; le tableau indique ce qui reste à compléter.
 recherche libre. Le tri et les conditions actives restent appliqués après
 un changement de ville et le recalcul des trajets. Ces filtres fonctionnent
 hors connexion, dans le fichier HTML ouvert par double-clic.
+
+## Traces communes
+
+Le calcul compare les points GPX originaux, en mètres, sans téléchargement.
+Une autre trace compte une seule fois si les deux parcours partagent au moins
+**100 m continus** à **15 m maximum** l'un de l'autre, quel que soit le sens de
+parcours. La trace elle-même est exclue. Les petits croisements et les portions
+séparées par une interruption d'enregistrement ne sont pas additionnés.
+
+Cliquer sur le nombre dans la colonne **Traces communes** ouvre la carte de la
+trace sélectionnée et de ses traces communes. La trace sélectionnée est dessinée
+plus épaisse et chaque parcours conserve sa couleur. Les traces communes sont
+affichées même si des filtres du tableau les masquent.
+
+La colonne permet le tri et les mêmes filtres numériques que les autres colonnes.
+Les paramètres sont réglables avec `--overlap-tolerance METRES` et
+`--overlap-min-length METRES`. Les comparaisons sont conservées dans
+`.cache_gpx/traces_communes_v1.json` et réutilisées par empreinte du contenu GPX ;
+un renommage ne les invalide pas. Retirer une trace du dossier la retire du
+compteur et de la carte. `--cache-clear` efface aussi ces comparaisons.
 
 ## Kilomètres de goudron longé
 
@@ -402,23 +425,36 @@ de tuiles ; sa disponibilité n'est pas garantie.
 
 ## Générer le catalogue
 
-Dans PowerShell, depuis le dossier du bundle :
+Dans PowerShell, sans dossier indiqué :
 
 ~~~powershell
-.\gpx2dash.exe "C:\chemin\vers\gpx" --asphalt --html tableau_bord.html --kml traces.kml
+.\gpx2dash.exe
 ~~~
 
-Sans dossier indiqué, le script utilise le dossier voisin `../gpx` s'il existe,
-sinon le dossier courant. Un dossier différent peut être fourni en premier argument :
+Pour traiter un autre dossier :
+
+~~~powershell
+.\gpx2dash.exe "C:\chemin\vers\gpx"
+~~~
+
+Sans dossier indiqué, le programme recherche les GPX dans le dossier de
+l'exécutable (ou du script pour les sources). Un dossier différent peut être
+fourni en premier argument :
 
 ~~~powershell
 .\gpx2dash.exe "C:\chemin\vers\gpx" --html tableau_bord.html
 ~~~
 
-Les extensions .gpx et .GPX sont reconnues. Sans nom de sortie explicite,
-les fichiers KML et HTML sont horodatés. Les caches des sources sont écrits dans
-.cache_gpx de gpx2dash ; le bundle utilise .cache_gpx du dossier courant.
-Le chemin est configurable avec --cache. Le cache ne se vide jamais seul :
+La recherche est récursive : les sous-dossiers sont inclus, sauf les dossiers
+`.cache_gpx` et le dossier de cache personnalisé. Les extensions .gpx et .GPX
+sont reconnues. Le cache `.cache_gpx` et les fichiers KML et HTML sont créés
+dans le dossier traité. Sans nom de sortie explicite, les fichiers portent le nom
+du dossier suivi de l'horodatage : par exemple `gpx_20261013_223000.html`
+et `gpx_20261013_223000.kml` pour un dossier `gpx`.
+Les chemins relatifs passés à `--cache`, `--html` et `--kml` sont relatifs au
+dossier traité ; les chemins absolus permettent de choisir un autre emplacement.
+Ajouter `--asphalt` pour télécharger les données de goudron manquantes.
+Le cache ne se vide jamais seul :
 profils d'altitude et tuiles du MNT, mesures de goudron, voies OSM et trajets
 sont conservés jusqu'à --cache-clear, qui n'efface que les fichiers créés par
 gpx2dash dans ce dossier.
@@ -426,7 +462,7 @@ gpx2dash dans ce dossier.
 --from-cache reprend tous les résultats en cache, y compris ceux du dossier GPX,
 si l'empreinte SHA-256 et le protocole de calcul correspondent. Une trace
 nouvelle utilise les profils locaux ou les altitudes GPX, sans téléchargement
-d'altitudes. Le dossier source est seulement lu. Les trajets OSRM peuvent être
+d'altitudes. Les fichiers GPX sont seulement lus. Les trajets OSRM peuvent être
 calculés en ligne dans ce mode.
 
 Pour définir une autre ville dès la génération :
