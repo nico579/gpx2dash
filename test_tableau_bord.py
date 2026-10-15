@@ -1,4 +1,5 @@
 """Contrôles du tableau HTML et des trajets OSRM, sans accès réseau réel."""
+import ast
 from contextlib import chdir
 from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
@@ -14,6 +15,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import gpxpy
 import gpx2dash
+from denivele_gpx2elev import MODELE_REFUSE
 from tableau_bord import date_du_nom, extraire_date, generer_tableau_bord
 from trajets_osrm import (ClientOSRM, ErreurOSRM, ajouter_trajets_osrm,
                           cache_valide, chercher_villes, cle_trajet, ecrire_json, lien_osm)
@@ -439,6 +441,13 @@ class OSRMTests(unittest.TestCase):
         self.assertIn("France", cities[0]["libelle"])
         self.assertEqual(parse_qs(urlsplit(fetch.call_args.args[0].full_url).query)["q"], ["Toulon"])
 
+    def test_refused_cache_value_leaves_no_temporary_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "trajets_osrm_v1.json"
+            with self.assertRaises(ValueError):
+                ecrire_json(path, {"routes": {"x": {"distance_route_m": float("nan")}}})
+            self.assertEqual(list(Path(directory).iterdir()), [])
+
     def test_embedded_json_cannot_close_the_script_element(self):
         name = '</script><img src=x onerror=alert(1)>'
         with tempfile.TemporaryDirectory() as directory:
@@ -451,6 +460,62 @@ class OSRMTests(unittest.TestCase):
         payload = json.loads(html[start:html.index("</script>", start)])
         self.assertEqual(payload["origine"]["libelle"], name)
         self.assertEqual(payload["traces"][0]["id"], name)
+
+
+class TranslationTests(unittest.TestCase):
+    """Un message que Python écrit dans le tableau doit exister en anglais."""
+    RACINE = Path(__file__).resolve().parent
+    # Messages de la seule ligne de commande, jamais écrits dans le tableau.
+    CLI_SEULEMENT = {"parametres_valides", "serveur_valide", "coordonnees", "chercher_villes"}
+
+    @staticmethod
+    def texte(noeud):
+        if isinstance(noeud, ast.Constant) and isinstance(noeud.value, str):
+            return noeud.value
+        if isinstance(noeud, ast.JoinedStr):
+            return "".join(v.value if isinstance(v, ast.Constant) else "{}" for v in noeud.values)
+        return None
+
+    def messages_python(self):
+        """Messages levés, ou rangés dans un champ erreur_*, par les calculs du tableau."""
+        messages = {}
+        for module in ("trajets_osrm.py", "goudron_osm.py", "traces_communes.py"):
+            arbre = ast.parse((self.RACINE / module).read_text(encoding="utf-8"))
+            for fonction in ast.walk(arbre):
+                if not isinstance(fonction, ast.FunctionDef) or fonction.name in self.CLI_SEULEMENT:
+                    continue
+                for noeud in ast.walk(fonction):
+                    valeurs = []
+                    if (isinstance(noeud, ast.Call) and isinstance(noeud.func, ast.Name) and noeud.args
+                            and noeud.func.id in ("ValueError", "ErreurOSRM", "LotTropLourd")):
+                        valeurs.append(noeud.args[0])
+                    elif isinstance(noeud, ast.Dict):
+                        valeurs += [v for k, v in zip(noeud.keys, noeud.values)
+                                    if isinstance(k, ast.Constant) and str(k.value).startswith("erreur_")]
+                    elif isinstance(noeud, ast.Assign):
+                        valeurs += [noeud.value for cible in noeud.targets
+                                    if (isinstance(cible, ast.Subscript) and isinstance(cible.slice, ast.Constant)
+                                        and str(cible.slice.value).startswith("erreur_"))
+                                    or (isinstance(cible, ast.Name) and cible.id.startswith("erreur"))]
+                    for valeur in valeurs:
+                        if self.texte(valeur) is not None:
+                            messages[self.texte(valeur)] = f"{module}:{valeur.lineno}"
+        return messages
+
+    def test_python_messages_shown_in_the_dashboard_exist_in_english(self):
+        js = (self.RACINE / "dashboard_i18n.js").read_text(encoding="utf-8")
+        bloc = js[js.index("const english = {"):js.index("const reverse")]
+        # Une valeur variable ({code}, {date}) compte comme un emplacement quelconque.
+        cles = {re.sub(r"\{[^}]*\}", "{}", json.loads(cle))
+                for cle in re.findall(r'^\s*("(?:[^"\\]|\\.)*"):', bloc, re.M)}
+        messages = self.messages_python()
+        self.assertGreater(len(messages), 25)  # le balayage trouve bien les messages
+        manquants = sorted(f"{lieu} {message}" for message, lieu in messages.items()
+                           if re.sub(r"\{[^}]*\}", "{}", message) not in cles)
+        # Libellés du modèle d'altitude, affichés au survol du D+.
+        manquants += [libelle for libelle in ("GPX filtré (secours)", "Indisponible", MODELE_REFUSE)
+                      if libelle not in cles]
+        self.assertEqual(manquants, [])
 
 
 if __name__ == "__main__":

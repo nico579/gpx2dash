@@ -150,7 +150,32 @@ const dashboardI18n = (() => {
   "Goudron non calculé : lancer gpx2dash.py avec --asphalt (Internet requis).": "Asphalt not calculated: run gpx2dash with --asphalt (Internet required).",
   "GPX original ou empreinte absente ; goudron non calculé.": "Original GPX or fingerprint missing; asphalt not calculated.",
   "Le GPX a changé pendant le calcul ; régénérez le tableau.": "The GPX changed during calculation; regenerate the dashboard.",
-  "Service de recherche de villes indisponible.": "Town search service unavailable."
+  "Service de recherche de villes indisponible.": "Town search service unavailable.",
+  "GPX filtré (secours)": "Filtered GPX (fallback)",
+  "Indisponible": "Unavailable",
+  "Trace hors des limites du moteur de dénivelé": "Track outside the elevation engine's limits",
+  "Coordonnées du départ invalides.": "Invalid start coordinates.",
+  "OSRM : service occupé (HTTP 429). Réessayez dans quelques instants.": "OSRM: service busy (HTTP 429). Try again in a moment.",
+  "OSRM : requête refusée.": "OSRM: request rejected.",
+  "OSRM : serveur indisponible (HTTP {code}).": "OSRM: server unavailable (HTTP {code}).",
+  "OSRM : réseau indisponible ou délai dépassé.": "OSRM: network unavailable or timed out.",
+  "OSRM : réponse illisible.": "OSRM: unreadable response.",
+  "Overpass indisponible (HTTP {code}). Relancez avec --asphalt pour reprendre.": "Overpass unavailable (HTTP {code}). Run again with --asphalt to resume.",
+  "Overpass : réseau indisponible ou délai dépassé. Relancez avec --asphalt.": "Overpass: network unavailable or timed out. Run again with --asphalt.",
+  "Overpass : réponse incomplète ; calcul du goudron non effectué.": "Overpass: incomplete response; asphalt not calculated.",
+  "Overpass : réponse trop volumineuse.": "Overpass: response too large.",
+  "Overpass : réponse illisible.": "Overpass: unreadable response.",
+  "Overpass : élément invalide.": "Overpass: invalid element.",
+  "Overpass : géométrie de voie manquante.": "Overpass: missing road geometry.",
+  "Overpass : coordonnées invalides.": "Overpass: invalid coordinates.",
+  "Géométrie de recherche du goudron absente.": "Missing search geometry for the asphalt calculation.",
+  "Coordonnées GPX invalides pour le calcul du goudron.": "Invalid GPX coordinates for the asphalt calculation.",
+  "Aucun segment GPX utilisable pour le goudron.": "No GPX segment usable for the asphalt calculation.",
+  "Trace vide ou coordonnées invalides.": "Empty track or invalid coordinates.",
+  "Distance géodésique invalide.": "Invalid geodesic distance.",
+  "Segment trop long pour le calcul du goudron.": "Segment too long for the asphalt calculation.",
+  "Coordonnées GPX absentes ou invalides.": "Missing or invalid GPX coordinates.",
+  "Projection des coordonnées GPX impossible.": "GPX coordinates could not be projected."
 };
  const reverse = new Map(Object.entries(english).map(([fr, en]) => [en, fr]));
  const french = {

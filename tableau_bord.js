@@ -425,6 +425,20 @@
    message(status, "Dernier départ restauré : {city}. Résultats repris du cache.", {city: saved.libelle});
   }
  }
+ // Titres écrits par Python avec une valeur variable : le modèle se traduit, la valeur reste.
+ const dynamicTitles = [
+  [/^OSRM, relevé le (.*)\. Sans trafic en temps réel\.$/, "OSRM, relevé le {date}. Sans trafic en temps réel.", "date"],
+  [/^OSRM : serveur indisponible \(HTTP (\d+)\)\.$/, "OSRM : serveur indisponible (HTTP {code}).", "code"],
+  [/^Overpass indisponible \(HTTP (\d+)\)\. Relancez avec --asphalt pour reprendre\.$/,
+   "Overpass indisponible (HTTP {code}). Relancez avec --asphalt pour reprendre.", "code"]
+ ];
+ function translateTitle(title) {
+  for (const [pattern, template, name] of dynamicTitles) {
+   const match = title.match(pattern);
+   if (match) return t(template, {[name]: match[1]});
+  }
+  return t(title);
+ }
  function cellDistance(cell) {
   return cell.dataset.filter === "" ? "—" : Number(cell.dataset.filter).toFixed(1).replace(".", dashboardI18n.language === "fr" ? "," : ".") + " km";
  }
@@ -447,8 +461,7 @@
    row.querySelectorAll("[data-row-i18n]").forEach(el => el.textContent = t(el.dataset.rowI18n));
    for (const index of [3, 5, 6, 7]) {
     const cell = cells[index]; if (!cell.dataset.originalTitle) cell.dataset.originalTitle = cell.title;
-    const routeDate = cell.dataset.originalTitle.match(/^OSRM, relevé le (.*)\. Sans trafic en temps réel\.$/);
-    cell.title = routeDate ? t("OSRM, relevé le {date}. Sans trafic en temps réel.", {date: routeDate[1]}) : t(cell.dataset.originalTitle);
+    cell.title = translateTitle(cell.dataset.originalTitle);
     if (index === 7 && !cell.dataset.error) cell.title = t("asphaltTitle", {margin: data.asphaltTolerance, angle: data.asphaltAngle, date: cell.dataset.osmDate ? t("Données OSM du {date}.", {date: cell.dataset.osmDate}) : ""});
    }
     cells[8].title = cells[8].dataset.error ? t(cells[8].dataset.error) :
