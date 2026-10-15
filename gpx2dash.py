@@ -41,8 +41,11 @@ ANCIENNE_VERSION_CACHE = "v6-gpx2elev"
 CLES_STATS = ('denivele_pos', 'denivele_neg', 'denivele_exact', 'source_denivele',
               'modele', 'distance_m', 'gpx_somme_brute', 'gpx_filtre', 'protocole',
               'version_gpx2elev', 'positions_5m', 'replis', 'erreur_modeles')
+# Absentes des entrées antérieures, sans qu'il faille les recalculer pour autant.
+CLES_STATS_FACULTATIVES = ('replis_passagers',)
 # Ce qui ne dépend que du contenu ; le nom et le chemin viennent toujours du fichier.
-CLES_ENTREE = ('empreinte_gpx', *CLES_STATS, 'date_gpx', 'duree_s', 'lat_lon_depart', 'ville')
+CLES_ENTREE = ('empreinte_gpx', *CLES_STATS, *CLES_STATS_FACULTATIVES,
+               'date_gpx', 'duree_s', 'lat_lon_depart', 'ville')
 
 def nettoyer_heure_du_nom(nom):
     # Retire l'heure HH-MM-SS (ou HH:MM:SS, HHMMSS) qui suit une date YYYY-MM-DD (ou YYYYMMDD).
@@ -150,12 +153,14 @@ def extraire_et_reduire(args):
         # Une trace n'est traitée qu'une fois : un dénivelé issu d'un modèle d'altitude
         # est définitif. Un repli sur l'altitude GPS (hors connexion, réseau coupé) est
         # retenté en mode normal ; --from-cache reprend tout ce qui est en cache.
-        # Un refus du moteur ne dépend que du contenu et de sa version.
+        # Un refus du moteur ne dépend que du contenu et de sa version. Un repli dû à
+        # une panne passagère (IGN en panne) est retenté, modèle écarté en premier.
         source = entree.get("source_denivele")
+        passagers = entree.get("replis_passagers") or []
         reutilise = (entree.get("protocole") == PROTOCOL
                      and all(cle in entree for cle in CLES_STATS)
                      and (options.get("statistiques_cache", False)
-                          or source not in ("GPX", "INCONNU", SOURCE_REFUSEE)
+                          or (source not in ("GPX", "INCONNU", SOURCE_REFUSEE) and not passagers)
                           or (source == SOURCE_REFUSEE and entree.get("version_gpx2elev") == VERSION_GPX2ELEV)))
         segments_connus = entree['segments'] if isinstance(entree.get('segments'), dict) else {}
         geometrie = (tolerance in segments_connus
@@ -165,13 +170,15 @@ def extraire_et_reduire(args):
         if not geometrie:
             gpx = lire_gpx(brut)
         if reutilise:
-            stats = {cle: entree[cle] for cle in CLES_STATS}
+            stats = {cle: entree[cle] for cle in (*CLES_STATS, *CLES_STATS_FACULTATIVES) if cle in entree}
         else:
             try:
-                if options.get("altitudes_en_ligne", True):
-                    stats = calculer_denivele(brut, dossier_cache / 'gpx2elev')
-                else:
+                if not options.get("altitudes_en_ligne", True):
                     stats = calculer_denivele(brut, dossier_cache / 'gpx2elev', online=False)
+                elif passagers:
+                    stats = calculer_denivele(brut, dossier_cache / 'gpx2elev', retenter=passagers)
+                else:
+                    stats = calculer_denivele(brut, dossier_cache / 'gpx2elev')
             except TraceRefusee as exc:
                 # gpxpy lit la trace, le moteur la refuse (taille, longueur) : elle
                 # reste sur la carte et dans le KML, seul son dénivelé manque.
@@ -253,7 +260,7 @@ def vider_cache(dossier):
         supprimes += 1
     return supprimes
 
-def fusionner_gpx_vers_kml_parallele(dossier_entree, fichier_sortie, tolerance_m=10, epaisseur=3,
+def fusionner_gpx_vers_kml_parallele(dossier_entree, fichier_sortie, tolerance_m=10, epaisseur=5,
                                     *, fichier_html=None, routes_en_ligne=True,
                                     origine_route=DEPART_GAREOULT, libelle_origine="Mairie de Garéoult",
                                     dossier_cache=None, statistiques_cache=False, serveur_osrm=SERVEUR_OSRM,
@@ -328,6 +335,16 @@ def fusionner_gpx_vers_kml_parallele(dossier_entree, fichier_sortie, tolerance_m
             resultats[index]['ville'] = geo['name']
             resultats[index]['cache_a_jour'] = False
 
+    # Enregistré avant les phases réseau, qui n'y ajoutent rien : une interruption
+    # pendant une attente d'Overpass ou d'OSRM ne perd plus le travail des traces.
+    for res in resultats:
+        if res.pop('cache_a_jour', False):
+            continue
+        try:
+            ecrire_cache_trace(res)
+        except OSError as exc:
+            print(f"[{res['nom']}] Cache non enregistré : {exc}")
+
     print("Mesure des portions longées près du goudron OSM...")
     with tqdm(total=len(resultats), desc="Goudron OSM / cache", ncols=100) as barre:
         bilan_goudron = ajouter_goudron_osm(
@@ -350,14 +367,6 @@ def fusionner_gpx_vers_kml_parallele(dossier_entree, fichier_sortie, tolerance_m
           f"{bilan_commun['calcules']} calculées, {bilan_commun['erreurs']} non calculées.")
     if bilan_commun["erreur_cache"]:
         print("Cache des portions communes non enregistré : " + bilan_commun["erreur_cache"])
-
-    for res in resultats:
-        if res.pop('cache_a_jour', False):
-            continue
-        try:
-            ecrire_cache_trace(res)
-        except OSError as exc:
-            print(f"[{res['nom']}] Cache non enregistré : {exc}")
 
     print("Compilation du fichier KML...")
     kml = simplekml.Kml()
@@ -395,6 +404,10 @@ def fusionner_gpx_vers_kml_parallele(dossier_entree, fichier_sortie, tolerance_m
     sources = Counter(res['modele'] for res in resultats if 'erreur' not in res)
     print("D+ estimé (5 m / sigma 20 m / hystérésis 2 m) : " +
           ', '.join(f"{modele} : {nombre}" for modele, nombre in sources.items()))
+    a_retenter = sum(1 for res in resultats if 'erreur' not in res and res.get('replis_passagers'))
+    if a_retenter:
+        print(f"{a_retenter} trace(s) calculée(s) avec un modèle de repli pendant une panne passagère : "
+              "le modèle mieux classé sera retenté au prochain lancement.")
 
     kml_enregistre = False
     try:
@@ -447,20 +460,20 @@ def main():
     parser.add_argument("--osrm-server", default=SERVEUR_OSRM, help="OSRM driving server URL.")
     parser.add_argument("--asphalt", action="store_true", help="Download nearby OSM roads to measure asphalt alongside tracks; otherwise use cache only.")
     parser.add_argument("--asphalt-tolerance", type=float, default=MARGE_GOUDRON, metavar="METRES",
-                        help="Maximum distance to the OSM road axis (1-50 m, default: 15).")
+                        help="Maximum distance to the OSM road axis (1-50 m, default: %(default)g).")
     parser.add_argument("--asphalt-angle", type=float, default=ANGLE_GOUDRON, metavar="DEGREES",
-                        help="Maximum direction difference, either direction (1-60 degrees, default: 30).")
+                        help="Maximum direction difference, either direction (1-60 degrees, default: %(default)g).")
     parser.add_argument("--overlap-tolerance", type=float, default=MARGE_COMMUNE, metavar="METRES",
-                        help="Maximum separation for shared GPX portions (1-100 m, default: 15).")
+                        help="Maximum separation for shared GPX portions (1-100 m, default: %(default)g).")
     parser.add_argument("--overlap-min-length", type=float, default=LONGUEUR_COMMUNE, metavar="METRES",
-                        help="Minimum continuous shared portion in each GPX (default: 100 m).")
+                        help="Minimum continuous shared portion in each GPX (default: %(default)g m).")
     parser.add_argument("--overpass-server", default=SERVEUR_OVERPASS, help="Overpass API URL for road surfaces.")
     parser.add_argument("--origin-city", help="Find the initial driving origin with Photon.")
     parser.add_argument("--origin", nargs=2, type=float, metavar=("LAT", "LON"), default=DEPART_GAREOULT,
                         help="Driving origin (default: Gareoult town hall).")
     parser.add_argument("--origin-name", default="Mairie de Garéoult", help="Driving origin label.")
-    parser.add_argument("--tolerance", type=float, default=10, help="KML/map simplification in metres (default: 10).")
-    parser.add_argument("--line-width", type=float, default=5, help="KML line width (default: 5).")
+    parser.add_argument("--tolerance", type=float, default=10, help="KML/map simplification in metres (default: %(default)g).")
+    parser.add_argument("--line-width", type=float, default=5, help="KML line width (default: %(default)g).")
     parser.add_argument("--language", choices=("en", "fr"), help="Initial dashboard language (default: browser language).")
     # Hidden aliases keep existing commands working, without duplicating the English help.
     for old, dest, kw in [

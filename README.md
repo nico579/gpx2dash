@@ -87,7 +87,9 @@ method to every track to calculate cumulative ascent **D+** and descent **D−**
 If no model provides a complete profile, the engine applies the same
 resampling, smoothing and threshold to **GPX elevations**, when complete.
 The result is identified as a **filtered GPX fallback**. If no usable
-elevation data is available, gain/loss remains **unknown**.
+elevation data is available, gain/loss remains **unknown**. A track the engine
+refuses (over 20 MB, 250,000 points or about 1,500 km) stays on the map and in
+the KML; only its elevation is unavailable.
 
 The dashboard and KML share these results, displayed to the nearest metre.
 Exact values and comparisons with raw and filtered GPX elevations are stored
@@ -99,9 +101,11 @@ Each track is processed once. Its results are cached under the SHA-256
 fingerprint of its content, so renaming or moving a file does not reprocess it.
 Without `--from-cache`, only new or modified tracks are calculated, along with
 tracks that only obtained filtered GPX elevations, and missing elevation data is
-downloaded. With `--from-cache`, cached results are reused as they are and a new
-track uses cached elevation profiles, then filtered GPX elevations; **no
-elevation data is downloaded**.
+downloaded. A track calculated with a fallback model during a transient outage of
+a better-ranked model (network down, timeout, busy or failing server) is also
+recalculated: that model is tried first. With `--from-cache`, cached results
+are reused as they are and a new track uses cached elevation profiles, then
+filtered GPX elevations; **no elevation data is downloaded**.
 
 ## Install and run
 
@@ -282,8 +286,9 @@ In the HTML:
 
 The driving columns, OpenStreetMap links and overview update. Active filters
 and sorting remain applied. The last origin and recent routes are saved in the
-browser. On cancellation or service failure, displayed values retain their
-previous origin; completed batches remain cached for resuming.
+browser; if GPX files were added since, the last origin stays selected and only
+their routes remain to calculate. On cancellation or service failure, displayed
+values retain their previous origin; completed batches remain cached for resuming.
 
 The default origin is Garéoult town hall, France (43.3293, 6.0458).
 Set another initial town when generating:

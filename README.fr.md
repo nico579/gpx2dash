@@ -93,6 +93,8 @@ Si aucun modèle ne fournit un profil complet, le moteur applique le même
 rééchantillonnage, lissage et seuil aux **altitudes GPX**, lorsqu'elles sont
 complètes. Ce résultat est identifié comme **« GPX filtré (secours) »**.
 Si aucune altitude exploitable n'est disponible, le dénivelé reste **inconnu**.
+Une trace que le moteur refuse (plus de 20 Mo, de 250 000 points ou d'environ
+1 500 km) reste sur la carte et dans le KML ; seul son dénivelé est indisponible.
 
 Le tableau et le KML utilisent les mêmes résultats, affichés au mètre près ;
 les valeurs exactes et les comparaisons avec les altitudes GPX brutes et filtrées
@@ -104,7 +106,10 @@ Chaque trace n'est traitée qu'une fois. Ses résultats sont rangés sous
 l'empreinte SHA-256 de son contenu : un renommage ou un déplacement ne la fait
 pas retraiter. Sans `--from-cache`, seules les traces nouvelles ou modifiées sont
 calculées, ainsi que celles qui n'avaient obtenu que les altitudes GPX filtrées,
-et les données d'altitude manquantes sont téléchargées. Avec `--from-cache`, les
+et les données d'altitude manquantes sont téléchargées. Une trace calculée avec un
+modèle de repli pendant une panne passagère d'un modèle mieux classé (réseau coupé,
+délai dépassé, serveur occupé ou en panne) est aussi recalculée : ce modèle est
+réessayé en premier. Avec `--from-cache`, les
 résultats en cache sont repris tels quels et une trace nouvelle utilise les
 profils d'altitude déjà en cache, puis les altitudes GPX filtrées ;
 **aucune donnée d'altitude n'est téléchargée**.
@@ -263,6 +268,8 @@ Une fois le tableau ouvert :
 Les deux colonnes routières, leurs liens OpenStreetMap et le bilan sont mis à jour.
 Le tri choisi reste appliqué. Le dernier départ et les résultats sont conservés
 dans le navigateur ; les résultats déjà calculés sont réutilisés sans nouvel appel.
+Si des GPX ont été ajoutés depuis, le dernier départ reste choisi et seuls leurs
+trajets restent à calculer.
 Le tableau propose aussi des filtres combinables et le téléchargement de chaque GPX.
 
 Garéoult est le départ initial. Une connexion Internet est nécessaire pour chercher
