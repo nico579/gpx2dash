@@ -220,9 +220,9 @@ defusedxml==0.7.1 \
     # via
     #   -r requirements.in
     #   gpx2elev
-gpx2elev==0.5.1 \
-    --hash=sha256:7d65046c03448648765445444a535b7751742101ea5d39a3b4f4caf4ba621eb2 \
-    --hash=sha256:b0eb0ebaa55230883f9639b87933d72d4fc49085806721b1b1c3928a96926566
+gpx2elev==0.5.2 \
+    --hash=sha256:8848c493255f636357fc4da7757cdaf3907e9e312924621eeb17f2b7f065fab2 \
+    --hash=sha256:9addcf86d50324369121e6781b696ca7e1ea895c15aca6ad6bed9c34b4ec6d53
     # via -r requirements.in
 gpxpy==1.6.2 \
     --hash=sha256:289bc2d80f116c988d0a1e763fda22838f83005573ece2bbc6521817b26fb40a \

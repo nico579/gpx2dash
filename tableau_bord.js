@@ -420,9 +420,13 @@
    const k = key(trace.position, saved.position);
    if (usable(routeCache.get(k))) routes.set(k, routeCache.get(k));
   });
-  if (data.traces.every(trace => routes.has(key(trace.position, saved.position)))) {
+  // Un GPX ajouté depuis ne fait plus oublier le départ choisi : ses trajets se
+  // calculent d'un clic. Sans aucun trajet en cache, le départ par défaut reste.
+  const missing = data.traces.filter(trace => !routes.has(key(trace.position, saved.position))).length;
+  if (routes.size) {
    applyOrigin(saved, routes); setChoices([saved]); input.value = saved.libelle;
-   message(status, "Dernier départ restauré : {city}. Résultats repris du cache.", {city: saved.libelle});
+   if (missing) message(status, "Dernier départ restauré : {city}. {n} trajet(s) à calculer : cliquez sur « Calculer les trajets ».", {city: saved.libelle, n: missing});
+   else message(status, "Dernier départ restauré : {city}. Résultats repris du cache.", {city: saved.libelle});
   }
  }
  // Titres écrits par Python avec une valeur variable : le modèle se traduit, la valeur reste.

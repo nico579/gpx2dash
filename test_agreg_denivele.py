@@ -11,6 +11,7 @@ import xml.etree.ElementTree as ET
 
 import numpy as np
 import gpxpy
+import requests
 import gpx2dash as agreg
 from denivele_gpx2elev import MODELE_REFUSE, SOURCE_REFUSEE, calculer_denivele
 from gpx2elev.core import distances, parse_gpx, prepare
@@ -150,6 +151,44 @@ class ElevationTests(unittest.TestCase):
             compute.assert_called_once()
             agreg.extraire_et_reduire((str(path), 10, {'statistiques_cache': True, 'altitudes_en_ligne': False}))
             compute.assert_called_once()
+
+    def test_transient_fallback_is_retried_until_the_better_model_answers(self):
+        busy = requests.Response()
+        busy.status_code = 503
+
+        class Panne(Reader):
+            ign_en_panne = True
+
+            def read(self, source, coordinates, progress):
+                if source == Source.IGN and self.ign_en_panne:
+                    self.calls.append(source)
+                    raise requests.HTTPError("503 Server Error", response=busy)
+                return super().read(source, coordinates, progress)
+
+        lecteur = Panne()
+        def dem(brut, cache, **options):
+            return calculer_denivele(brut, cache, reader=lecteur, **options)
+        path = self.directory / 'panne.gpx'
+        path.write_bytes(fixture())
+        with patch.object(agreg, 'calculer_denivele', dem):
+            first = agreg.extraire_et_reduire((str(path), 10))
+            self.assertEqual((first['source_denivele'], first['replis_passagers']), ('MAPTERHORN', ['IGN']))
+            agreg.ecrire_cache_trace(first)
+            # Toujours en panne : le repli en cache sert, l'IGN reste à retenter.
+            again = agreg.extraire_et_reduire((str(path), 10))
+            self.assertEqual((again['source_denivele'], again['replis_passagers']), ('MAPTERHORN', ['IGN']))
+        # --from-cache reprend le repli tel quel, sans réseau.
+        with patch.object(agreg, 'calculer_denivele', side_effect=AssertionError):
+            offline = agreg.extraire_et_reduire((str(path), 10, {'statistiques_cache': True, 'altitudes_en_ligne': False,
+                                                                  'cache_seulement': True}))
+            self.assertEqual(offline['source_denivele'], 'MAPTERHORN')
+        lecteur.ign_en_panne = False
+        with patch.object(agreg, 'calculer_denivele', dem):
+            healed = agreg.extraire_et_reduire((str(path), 10))
+        self.assertEqual((healed['source_denivele'], healed['replis_passagers']), ('IGN', []))
+        agreg.ecrire_cache_trace(healed)
+        with patch.object(agreg, 'calculer_denivele', side_effect=AssertionError):
+            self.assertEqual(agreg.extraire_et_reduire((str(path), 10, {'cache_seulement': True}))['source_denivele'], 'IGN')
 
     def test_legacy_named_entry_is_migrated_without_recomputing_elevation(self):
         path = self.directory / 'ancienne.gpx'
@@ -300,6 +339,23 @@ class ElevationTests(unittest.TestCase):
         def sans_ids(kml):
             return re.sub(rb'(id="|#)\d+', rb'\1', kml)
         self.assertEqual(sans_ids(output.read_bytes()), sans_ids(first))
+
+    def test_trace_cache_survives_an_interrupted_network_phase(self):
+        import reverse_geocoder
+        (self.directory / 'a.gpx').write_bytes(fixture())
+        output = self.directory / 'output.kml'
+        def dem(brut, cache):
+            return calculer_denivele(brut, cache, reader=Reader())
+        # Ctrl+C pendant une longue attente d'Overpass : le travail des traces reste acquis.
+        with patch.object(agreg, 'calculer_denivele', dem), \
+                patch.object(agreg.concurrent.futures, 'ProcessPoolExecutor', concurrent.futures.ThreadPoolExecutor), \
+                patch.object(reverse_geocoder, 'search', return_value=[{'name': 'Test'}]), \
+                patch.object(agreg, 'ajouter_goudron_osm', side_effect=KeyboardInterrupt), \
+                self.assertRaises(KeyboardInterrupt):
+            agreg.fusionner_gpx_vers_kml_parallele(str(self.directory), str(output), routes_en_ligne=False)
+        cache = next((self.directory / agreg.DOSSIER_CACHE).glob(f'*_{agreg.VERSION_CACHE}.json'))
+        entree = json.loads(cache.read_text(encoding='utf-8'))
+        self.assertEqual((entree['ville'], entree['source_denivele']), ('Test', 'IGN'))
 
     def test_real_reference_and_aggregator(self):
         desktop = Path(__file__).resolve().parent.parent / 'gpxmnt/android/desktop'

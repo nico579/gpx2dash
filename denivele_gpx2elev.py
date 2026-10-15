@@ -5,7 +5,7 @@ n'entraîne pas Qt.
 """
 import gpx2elev
 from gpx2elev.core import PROTOCOL, compute, parse_gpx, prepare
-from gpx2elev.providers import MissingCoverage, Repository
+from gpx2elev.providers import RANKING, MissingCoverage, Repository, Source
 
 VERSION_GPX2ELEV = gpx2elev.__version__
 # Contenu que gpxpy lit mais que le moteur refuse : plus de 20 Mo, de 250 000 points
@@ -20,11 +20,13 @@ class TraceRefusee(ValueError):
     """Le moteur refuse ce contenu à la lecture ou à l'échantillonnage à 5 m."""
 
 
-def calculer_denivele(brut, dossier_cache, *, online=True, reader=None):
+def calculer_denivele(brut, dossier_cache, *, online=True, reader=None, retenter=()):
     """Un modèle complet pour toute la trace ; jamais de trous interpolés.
 
     Le GPX filtré n'est utilisé que si aucun modèle ne fournit le profil.
     Sans altitudes GPX complètes, le dénivelé reste explicitement inconnu.
+    `retenter` nomme les modèles mieux classés qu'une panne passagère avait
+    écartés : ils sont interrogés avant le profil de repli gardé en cache.
     """
     try:
         prepared = prepare(parse_gpx(brut))
@@ -33,11 +35,23 @@ def calculer_denivele(brut, dossier_cache, *, online=True, reader=None):
     repository = Repository(dossier_cache, reader=reader)
     erreur = None
     series = None
+    passagers = []
     try:
-        try:
-            series = repository.obtain(prepared.coordinates, online=online)
-        except MissingCoverage as exc:
-            erreur = str(exc)
+        for nom in retenter if online else ():
+            if nom not in Source.__members__:
+                continue
+            try:
+                series = repository.obtain(prepared.coordinates, source=Source[nom])
+                break
+            except MissingCoverage as exc:
+                passagers += [source.name for source in exc.transient]
+        if series is None:
+            try:
+                series = repository.obtain(prepared.coordinates, online=online)
+                passagers += [source.name for source in series.transient]
+            except MissingCoverage as exc:
+                erreur = str(exc)
+                passagers += [source.name for source in exc.transient]
         # Le profil nul sert seulement à obtenir les statistiques GPX communes.
         computed = compute(prepared, series.values if series else [0.0] * prepared.sample_count)
     finally:
@@ -47,6 +61,10 @@ def calculer_denivele(brut, dossier_cache, *, online=True, reader=None):
     gain = computed.gain if series else computed.gpx_filtered
     def valeurs(value):
         return {"Dplus_m": value.up, "Dmoins_m": value.down} if value is not None else None
+    # Seuls les modèles mieux classés que celui retenu méritent un nouvel essai.
+    rang = {source.name: i for i, source in enumerate(RANKING)}
+    limite = rang[series.source.name] if series else len(rang)
+    replis_passagers = sorted({nom for nom in passagers if rang[nom] < limite}, key=rang.get)
     return {
         "denivele_pos": round(gain.up) if gain is not None else None,
         "denivele_neg": round(gain.down) if gain is not None else None,
@@ -61,6 +79,7 @@ def calculer_denivele(brut, dossier_cache, *, online=True, reader=None):
         "positions_5m": prepared.sample_count,
         "replis": [{"modele": s.label, "raison": r} for s, r in series.fallbacks] if series else [],
         "erreur_modeles": erreur,
+        "replis_passagers": replis_passagers,
     }
 
 
@@ -80,4 +99,5 @@ def statistiques_refusees(raison, distance_m):
         "positions_5m": None,
         "replis": [],
         "erreur_modeles": raison,
+        "replis_passagers": [],
     }

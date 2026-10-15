@@ -1,5 +1,6 @@
 """Calculs OSRM/OpenStreetMap sans clé, par lots, avec cache et limite de débit."""
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 import json
 import math
 from pathlib import Path
@@ -48,6 +49,28 @@ def lien_osm(destination, origine=DEPART_GAREOULT):
     return "https://www.openstreetmap.org/directions?" + urlencode({
         "engine": "fossgis_osrm_car", "route": f"{lat0:.6f},{lon0:.6f};{lat:.6f},{lon:.6f}",
     })
+
+
+def attente_avant_reprise(exc, tentative, essais=4):
+    """Secondes à attendre avant de répéter une requête refusée, ou None.
+
+    Seul un service occupé (429) ou en panne (502 à 504) se réessaie, au plus
+    `essais` fois en tout : 30, 60 puis 120 s après un 429, trois fois moins après
+    une panne, ou davantage si le serveur le demande (Retry-After), jusqu'à 10 min.
+    """
+    if exc.code not in (429, 502, 503, 504) or tentative >= essais - 1:
+        return None
+    attente = (30 if exc.code == 429 else 10) * 2 ** tentative
+    retry_after = exc.headers.get("Retry-After") if exc.headers else None
+    if retry_after:
+        try:
+            attente = max(attente, float(retry_after))
+        except ValueError:
+            try:
+                attente = max(attente, (parsedate_to_datetime(retry_after) - datetime.now(timezone.utc)).total_seconds())
+            except (ValueError, TypeError, OverflowError):
+                pass
+    return attente if math.isfinite(attente) and attente <= 600 else None
 
 
 def ecrire_json(path, donnees):
@@ -101,27 +124,36 @@ class ClientOSRM:
             "sources": "0", "destinations": ";".join(str(i) for i in range(1, len(destinations) + 1)),
             "annotations": "distance,duration", "generate_hints": "false",
         })
-        if self.dernier_appel is not None:
-            time.sleep(max(0, 1.05 - (time.monotonic() - self.dernier_appel)))
-        self.dernier_appel = time.monotonic()
-        self.appels += 1
-        try:
-            with urlopen(Request(url, headers={"User-Agent": USER_AGENT}), timeout=25) as response:
-                data = json.loads(response.read(2 * 1024 * 1024))
-        except HTTPError as exc:
-            if exc.code == 429:
-                raise ErreurOSRM("OSRM : service occupé (HTTP 429). Réessayez dans quelques instants.", "serveur") from exc
-            if exc.code == 400:
-                try:
-                    data = json.loads(exc.read())
-                except ValueError:
-                    raise ErreurOSRM("OSRM : requête refusée.", "HTTP400") from exc
-            else:
-                raise ErreurOSRM(f"OSRM : serveur indisponible (HTTP {exc.code}).", "serveur") from exc
-        except (URLError, OSError) as exc:
-            raise ErreurOSRM("OSRM : réseau indisponible ou délai dépassé.", "serveur") from exc
-        except ValueError as exc:
-            raise ErreurOSRM("OSRM : réponse illisible.", "serveur") from exc
+        for tentative in range(4):
+            if self.dernier_appel is not None:
+                time.sleep(max(0, 1.05 - (time.monotonic() - self.dernier_appel)))
+            self.dernier_appel = time.monotonic()
+            self.appels += 1
+            try:
+                with urlopen(Request(url, headers={"User-Agent": USER_AGENT}), timeout=25) as response:
+                    data = json.loads(response.read(2 * 1024 * 1024))
+                break
+            except HTTPError as exc:
+                if exc.code == 400:
+                    try:
+                        data = json.loads(exc.read())
+                        break
+                    except ValueError:
+                        raise ErreurOSRM("OSRM : requête refusée.", "HTTP400") from exc
+                # Comme pour Overpass : un service occupé ou en panne est réessayé.
+                attente = attente_avant_reprise(exc, tentative)
+                if attente is None and exc.code == 429:
+                    raise ErreurOSRM("OSRM : service occupé (HTTP 429). Réessayez dans quelques instants.", "serveur") from exc
+                if attente is None:
+                    raise ErreurOSRM(f"OSRM : serveur indisponible (HTTP {exc.code}).", "serveur") from exc
+            except (URLError, OSError) as exc:
+                if tentative >= 1:
+                    raise ErreurOSRM("OSRM : réseau indisponible ou délai dépassé.", "serveur") from exc
+                attente = 10
+            except ValueError as exc:
+                raise ErreurOSRM("OSRM : réponse illisible.", "serveur") from exc
+            print(f"OSRM temporairement indisponible : reprise dans {attente:.0f} s.", flush=True)
+            time.sleep(attente)
         try:
             if data.get("code") != "Ok":
                 raise ErreurOSRM("OSRM : aucun point routier ou itinéraire trouvé.", data.get("code"))
