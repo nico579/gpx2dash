@@ -4,7 +4,6 @@ Les surfaces absentes ou ambiguës restent incertaines. Aucun revêtement n'est
 déduit de la catégorie de route. Le calcul ne dépend pas de l'origine routière.
 """
 from datetime import datetime, timezone
-from email.utils import parsedate_to_datetime
 import hashlib
 import json
 import math
@@ -14,7 +13,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from trajets_osrm import USER_AGENT, ecrire_json, serveur_valide
+from trajets_osrm import USER_AGENT, attente_avant_reprise, ecrire_json, serveur_valide
 
 SERVEUR_OVERPASS = "https://overpass-api.de/api/interpreter"
 PROTOCOL_GOUDRON = "goudron-osm-v1-5m-direction10m"
@@ -272,20 +271,7 @@ class ClientOverpass:
                 return data
             except HTTPError as exc:
                 erreur = f"Overpass indisponible (HTTP {exc.code}). Relancez avec --asphalt pour reprendre."
-                if exc.code in (429, 502, 503, 504) and tentative < 3:
-                    attente = 30 * (2 ** tentative) if exc.code == 429 else 10 * (2 ** tentative)
-                    retry_after = exc.headers.get("Retry-After") if exc.headers else None
-                    if retry_after:
-                        try:
-                            attente = max(attente, float(retry_after))
-                        except ValueError:
-                            try:
-                                date_retry = parsedate_to_datetime(retry_after)
-                                attente = max(attente, (date_retry - datetime.now(timezone.utc)).total_seconds())
-                            except (ValueError, TypeError, OverflowError):
-                                pass
-                    if not math.isfinite(attente) or attente > 600:
-                        attente = None
+                attente = attente_avant_reprise(exc, tentative)
                 if attente is None:
                     raise ValueError(erreur) from exc
             except (URLError, OSError) as exc:

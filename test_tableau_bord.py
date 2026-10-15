@@ -400,11 +400,24 @@ class OSRMTests(unittest.TestCase):
         results = [{"lat_lon_depart": (43.5 + i / 10000, 6.2)} for i in range(30)]
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "routes.json"
-            with patch("trajets_osrm.urlopen", side_effect=HTTPError("https://osrm", 503, "Unavailable", {}, None)) as fetch:
+            with patch("trajets_osrm.urlopen", side_effect=HTTPError("https://osrm", 503, "Unavailable", {}, None)) as fetch, \
+                    patch("trajets_osrm.time.sleep") as sleep, patch("trajets_osrm.time.monotonic", return_value=0):
                 ajouter_trajets_osrm(results, fichier_cache=path)
-            self.assertEqual(fetch.call_count, 1)
+            # Une panne est réessayée comme pour Overpass, puis condamne les lots suivants.
+            self.assertEqual(fetch.call_count, 4)
+            self.assertEqual([args[0][0] for args in sleep.call_args_list if args[0][0] > 3], [10, 20, 40])
             self.assertTrue(all("itineraire_url" in r and "erreur_route" in r for r in results))
             self.assertEqual(json.loads(path.read_text())["routes"], {})
+
+    def test_rate_limit_is_waited_out_like_overpass(self):
+        busy = HTTPError("https://osrm", 429, "Busy", {"Retry-After": "45"}, None)
+        answer = BytesIO(json.dumps(self.response([100])).encode())
+        with patch("trajets_osrm.urlopen", side_effect=[busy, answer]), \
+                patch("trajets_osrm.time.sleep") as sleep, patch("trajets_osrm.time.monotonic", return_value=0):
+            client = ClientOSRM()
+            routes = client.matrice([(43.5, 6.2)])
+        self.assertEqual((client.appels, routes[0]["distance_route_m"]), (2, 100))
+        self.assertIn(unittest.mock.call(45), sleep.call_args_list)
 
     def test_bad_coordinate_in_batch_is_isolated(self):
         bad = (43.7, 6.7)
