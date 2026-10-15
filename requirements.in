@@ -1,7 +1,7 @@
 # Python 3.12 ; versions vérifiées sous Windows.
 # Moteur gpx2elev publié sur PyPI ; son paquet de base n'entraîne pas Qt.
 # rasterio, Pillow, requests et defusedxml sont ses dépendances, figées ici.
-gpx2elev==0.5.0
+gpx2elev==0.5.1
 gpxpy==1.6.2
 simplekml==1.3.6
 tqdm==4.67.1
