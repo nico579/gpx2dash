@@ -11,12 +11,17 @@ import concurrent.futures
 from tqdm import tqdm
 import json
 import hashlib
+import math
 import shutil
 from collections import Counter
 from pathlib import Path
 
+import numpy as np
+
 from couleurs_traces import couleur_kml as couleur_stable
-from denivele_gpx2elev import PROTOCOL, calculer_denivele
+from denivele_gpx2elev import (PROTOCOL, SOURCE_REFUSEE, VERSION_GPX2ELEV, TraceRefusee,
+                               calculer_denivele, statistiques_refusees)
+from gpx2elev.core import distances
 from gpx2elev.providers import atomic_write
 from tableau_bord import date_du_nom, extraire_date, generer_tableau_bord
 from goudron_osm import (MARGE_GOUDRON, ANGLE_GOUDRON, SERVEUR_OVERPASS,
@@ -96,6 +101,20 @@ def _calc_duree(gpx):
                 duree_s = max(instants) - min(instants)
     return duree_s
 
+def lire_gpx(brut):
+    try:
+        texte = brut.decode('utf-8-sig')
+    except UnicodeDecodeError:
+        texte = brut.decode('latin-1')
+    return gpxpy.parse(texte)
+
+def distance_originale(gpx):
+    """Longueur des points d'origine, avec la formule du moteur de dénivelé."""
+    sources = [segment.points for track in gpx.tracks for segment in track.segments]
+    sources += [route.points for route in gpx.routes]
+    return math.fsum(float(distances(np.array([(p.latitude, p.longitude) for p in points]))[-1])
+                     for points in sources if len(points) >= 2)
+
 def extraire_et_reduire(args):
     chemin_fichier, tolerance_m = args[:2]
     options = args[2] if len(args) > 2 else {}
@@ -131,27 +150,32 @@ def extraire_et_reduire(args):
         # Une trace n'est traitée qu'une fois : un dénivelé issu d'un modèle d'altitude
         # est définitif. Un repli sur l'altitude GPS (hors connexion, réseau coupé) est
         # retenté en mode normal ; --from-cache reprend tout ce qui est en cache.
+        # Un refus du moteur ne dépend que du contenu et de sa version.
+        source = entree.get("source_denivele")
         reutilise = (entree.get("protocole") == PROTOCOL
                      and all(cle in entree for cle in CLES_STATS)
                      and (options.get("statistiques_cache", False)
-                          or entree.get("source_denivele") not in ("GPX", "INCONNU")))
+                          or source not in ("GPX", "INCONNU", SOURCE_REFUSEE)
+                          or (source == SOURCE_REFUSEE and entree.get("version_gpx2elev") == VERSION_GPX2ELEV)))
         segments_connus = entree['segments'] if isinstance(entree.get('segments'), dict) else {}
         geometrie = (tolerance in segments_connus
                      and all(cle in entree for cle in ('date_gpx', 'duree_s', 'lat_lon_depart')))
         if options.get("cache_seulement") and not (reutilise and geometrie):
             return None
         if not geometrie:
-            try:
-                texte = brut.decode('utf-8-sig')
-            except UnicodeDecodeError:
-                texte = brut.decode('latin-1')
-            gpx = gpxpy.parse(texte)
+            gpx = lire_gpx(brut)
         if reutilise:
             stats = {cle: entree[cle] for cle in CLES_STATS}
-        elif options.get("altitudes_en_ligne", True):
-            stats = calculer_denivele(brut, dossier_cache / 'gpx2elev')
         else:
-            stats = calculer_denivele(brut, dossier_cache / 'gpx2elev', online=False)
+            try:
+                if options.get("altitudes_en_ligne", True):
+                    stats = calculer_denivele(brut, dossier_cache / 'gpx2elev')
+                else:
+                    stats = calculer_denivele(brut, dossier_cache / 'gpx2elev', online=False)
+            except TraceRefusee as exc:
+                # gpxpy lit la trace, le moteur la refuse (taille, longueur) : elle
+                # reste sur la carte et dans le KML, seul son dénivelé manque.
+                stats = statistiques_refusees(str(exc), distance_originale(gpx or lire_gpx(brut)))
     except Exception as e:
         resultat = {**identite, 'erreur': f"Échec lecture ou calcul : {e}"}
         if empreinte is not None and not isinstance(e, OSError):
@@ -343,6 +367,8 @@ def fusionner_gpx_vers_kml_parallele(dossier_entree, fichier_sortie, tolerance_m
         if 'erreur' in res:
             print(f"[{res['nom']}] {res['erreur']}")
             continue
+        if res.get('source_denivele') == SOURCE_REFUSEE:
+            print(f"[{res['nom']}] Dénivelé non calculé : {res.get('erreur_modeles')}")
 
         nom_sans_heure = nettoyer_heure_du_nom(res['nom'])
         denivele = res.get('denivele_pos')

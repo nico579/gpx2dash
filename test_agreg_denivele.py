@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ET
 import numpy as np
 import gpxpy
 import gpx2dash as agreg
-from denivele_gpx2elev import calculer_denivele
+from denivele_gpx2elev import MODELE_REFUSE, SOURCE_REFUSEE, calculer_denivele
 from gpx2elev.core import distances, parse_gpx, prepare
 from gpx2elev.providers import Source
 
@@ -174,6 +174,52 @@ class ElevationTests(unittest.TestCase):
         with patch.object(agreg.gpxpy, 'parse', side_effect=AssertionError):
             again = agreg.extraire_et_reduire((str(path), 10, {'cache_seulement': True}))
         self.assertEqual(again['erreur'], first['erreur'])
+
+    LATITUDES_TRAVERSEE = (50, 42.5, 35)
+
+    def _traversee(self):
+        """Environ 1 670 km : lisible par gpxpy, au-delà des 300 000 positions à 5 m du moteur."""
+        path = self.directory / '2026-07-01_traversee.gpx'
+        points = ''.join(f'<trkpt lat="{lat}" lon="0.5"><ele>100</ele></trkpt>' for lat in self.LATITUDES_TRAVERSEE)
+        path.write_text(f'<gpx version="1.1" creator="test"><trk><trkseg>{points}</trkseg></trk></gpx>',
+                        encoding='utf-8')
+        return path
+
+    def test_trace_refused_by_the_engine_keeps_its_geometry(self):
+        path = self._traversee()
+        with patch.object(agreg, 'calculer_denivele', lambda brut, cache: calculer_denivele(brut, cache, online=False)):
+            first = agreg.extraire_et_reduire((str(path), 10))
+        self.assertNotIn('erreur', first)
+        self.assertEqual((first['source_denivele'], first['denivele_pos']), (SOURCE_REFUSEE, None))
+        self.assertIn('Trace trop longue', first['erreur_modeles'])
+        attendu = distances(np.array([[lat, .5] for lat in self.LATITUDES_TRAVERSEE]))[-1]
+        self.assertAlmostEqual(first['distance_m'], float(attendu))
+        self.assertTrue(first['segments'])
+        agreg.ecrire_cache_trace(first)
+        # Le refus ne dépend que du contenu et de la version du moteur : il est repris
+        # du cache, puis retenté avec une autre version, qui pourrait accepter la trace.
+        with patch.object(agreg, 'calculer_denivele', side_effect=AssertionError):
+            again = agreg.extraire_et_reduire((str(path), 10, {'cache_seulement': True}))
+        self.assertEqual((again['source_denivele'], again['distance_m']), (SOURCE_REFUSEE, first['distance_m']))
+        with patch.object(agreg, 'VERSION_GPX2ELEV', '99.0.0'):
+            self.assertIsNone(agreg.extraire_et_reduire((str(path), 10, {'cache_seulement': True})))
+
+    def test_refused_trace_reaches_kml_and_dashboard(self):
+        import reverse_geocoder
+        self._traversee()
+        output = self.directory / 'output.kml'
+        with patch.object(agreg, 'calculer_denivele', lambda brut, cache: calculer_denivele(brut, cache, online=False)), \
+                patch.object(agreg.concurrent.futures, 'ProcessPoolExecutor', concurrent.futures.ThreadPoolExecutor), \
+                patch.object(reverse_geocoder, 'search', return_value=[{'name': 'Test'}]):
+            resultats = agreg.fusionner_gpx_vers_kml_parallele(str(self.directory), str(output), routes_en_ligne=False)
+        self.assertNotIn('erreur', resultats[0])
+        ns = {'k': 'http://www.opengis.net/kml/2.2'}
+        noms = [n.text for n in ET.parse(output).getroot().findall('.//k:Placemark/k:name', ns)]
+        self.assertEqual(len(noms), 1)
+        self.assertIn('_D+?_', noms[0])
+        html = output.with_suffix('.html').read_text(encoding='utf-8')
+        self.assertNotIn('data-row-i18n="Trace illisible"', html)
+        self.assertIn(f'title="{MODELE_REFUSE}"', html)
 
     def test_elevation_cache_is_never_trimmed(self):
         with patch('gpx2elev.providers.trim_cache') as trim:
