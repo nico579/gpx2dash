@@ -132,6 +132,7 @@ const dashboardI18n = (() => {
   "{n} trajets renseignés depuis {city}. {missing} non renseignés.": "{n} routes available from {city}. {missing} unavailable.",
   "{error} Les valeurs affichées correspondent à {city}. Les lots terminés sont conservés pour reprendre.": "{error} Displayed values correspond to {city}. Completed batches are saved for resuming.",
   "Dernier départ restauré : {city}. Résultats repris du cache.": "Last origin restored: {city}. Results loaded from cache.",
+  "Dernier départ restauré : {city}. {n} trajet(s) à calculer : cliquez sur « Calculer les trajets ».": "Last origin restored: {city}. {n} route(s) to calculate: click “Calculate routes”.",
   "Aucun itinéraire routier trouvé depuis cette ville.": "No driving route found from this town.",
   "Réponse routière incomplète.": "Incomplete driving route response.",
   "Aucune liaison routière trouvée à proximité des points de départ (rayon de 1 km).": "No road connection near the starting points (1 km radius).",

@@ -197,6 +197,26 @@ try:
         assert visible() == [names[k] for k in "FCADB"]
         page.locator('thead button[data-column="8"]').click()
         assert visible() == [names[k] for k in "BDACF"]
+        # Rechargé, le tableau garde Hyères, même quand un trajet manque au cache
+        # (GPX ajouté depuis) : seul ce trajet reste à demander à OSRM.
+        # Le panneau des trajets se referme au rechargement : son texte se lit sans être affiché.
+        restored = "document.querySelector('.origin').innerText.includes('Hyères')"
+        page.reload()
+        page.wait_for_function(restored)
+        assert "Résultats repris du cache" in page.locator("#route-status").text_content()
+        page.evaluate("""() => {
+            const routes = JSON.parse(localStorage.getItem('gpx2dash.routes.v1'));
+            delete routes[Object.keys(routes).find(k => k.includes('|43.119000,6.128000|'))];
+            localStorage.setItem('gpx2dash.routes.v1', JSON.stringify(routes));
+        }""")
+        page.reload()
+        page.wait_for_function(restored)
+        assert "trajet(s) à calculer" in page.locator("#route-status").text_content()
+        page.locator("#route-settings summary").click()
+        page.locator("#calculate-routes").click()
+        page.wait_for_function("!document.querySelector('#calculate-routes').disabled")
+        assert len(requests) == 2, requests
+        assert " 0 non renseignés" in page.locator("#route-status").text_content()
         page.set_viewport_size({"width": 390, "height": 844})
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
         assert page.locator(".table-scroll").evaluate("el => el.scrollWidth > el.clientWidth")
@@ -206,7 +226,7 @@ try:
         browser.close()
     print("OK : 36 combinaisons colonne/opérateur, bornes inclusives, valeurs inconnues et nulles, "
           "arrondis, virgules, filtres ET et recherche, tri, validation, remise à zéro, "
-          "recalcul routier et mobile.")
+          "recalcul routier, départ restauré malgré un trajet manquant et mobile.")
 finally:
     stop_server(server, thread)
 
