@@ -2,18 +2,20 @@
 from datetime import datetime, timezone
 import json
 import math
-import os
 from pathlib import Path
-import tempfile
 import time
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, urlopen
 
+from gpx2elev.providers import atomic_write
+from version import VERSION
+
 DEPART_GAREOULT = (43.3293, 6.0458)  # mairie, latitude / longitude
 SERVEUR_OSRM = "https://routing.openstreetmap.de/routed-car"
 GEOCODEUR = "https://photon.komoot.io/api/"
-USER_AGENT = "gpx2dash/1.0 (personal GPX dashboard)"
+# Les règles d'usage d'OSM, de FOSSGIS et d'Overpass demandent un client identifiable.
+USER_AGENT = f"gpx2dash/{VERSION} (+https://github.com/nico579/gpx2dash)"
 CHAMPS_ROUTE = ("distance_route_m", "duree_route_s", "date_route", "erreur_route",
                 "distance_acces_m", "route_cacheable")
 
@@ -49,15 +51,9 @@ def lien_osm(destination, origine=DEPART_GAREOULT):
 
 
 def ecrire_json(path, donnees):
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(dir=path.parent, suffix=".part", delete=False) as fichier:
-        temporaire = Path(fichier.name)
-        fichier.write(json.dumps(donnees, ensure_ascii=False, allow_nan=False).encode("utf-8"))
-    try:
-        os.replace(temporaire, path)
-    finally:
-        temporaire.unlink(missing_ok=True)
+    # Sérialisé avant toute écriture, puis la même écriture atomique que le cache des
+    # traces : ni valeur refusée (NaN) ni disque plein ne laissent de .part derrière eux.
+    atomic_write(path, json.dumps(donnees, ensure_ascii=False, allow_nan=False).encode("utf-8"))
 
 
 def lire_cache(path):
