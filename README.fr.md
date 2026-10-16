@@ -139,8 +139,8 @@ avec recalcul du dénivelé, routage et mesure du goudron :
 ~~~
 
 Remplacer `C:\chemin\vers\gpx` par le chemin réel de ton dossier GPX, puis
-ouvrir **tableau_bord.html** dans ce dossier GPX par double-clic une fois la
-commande terminée.
+le tableau de bord **tableau_bord.html** s'ouvre dans le navigateur une fois la
+commande terminée (`--no-browser` pour l'éviter).
 Sous Linux/macOS, utiliser `./gpx2dash`. Le bundle contient Python et ses
 dépendances : aucune installation de Python n'est nécessaire.
 Passer directement aux [commandes d'utilisation](#commandes-dutilisation),
@@ -176,8 +176,8 @@ Pour générer le même catalogue qu'avec le bundle, à partir de ton dossier GP
 
 Remplacer `C:\chemin\vers\gpx` par le chemin réel de ton dossier GPX.
 Cette commande produit le même tableau et le même KML que celle du bundle.
-Le script affiche sa progression. Double-cliquer ensuite sur **tableau_bord.html**
-dans ce dossier GPX.
+Le script affiche sa progression, puis ouvre **tableau_bord.html** dans le
+navigateur.
 
 Sous Linux ou macOS, remplacer les commandes de l'environnement par :
 
@@ -244,7 +244,8 @@ français, dont `--depuis-cache`, restent acceptés comme alias cachés.
 
 ## Ouvrir le tableau
 
-Double-cliquer sur le fichier **tableau_bord.html** pour l'ouvrir dans le navigateur.
+Le tableau s'ouvre dans le navigateur à la fin du calcul, sauf avec `--no-browser`.
+Ensuite, double-cliquer sur le fichier **tableau_bord.html** pour le rouvrir.
 Aucun serveur local, compte ou clé API n'est nécessaire.
 
 Le fond utilise **OpenTopoMap**, une carte topographique basée sur les données
