@@ -55,7 +55,7 @@ of the road axis and have a direction difference of at most **30°**.
 Confirmed and uncertain surfaces are distinguished; this column supports
 the same filters as the others.
 
-Open the HTML by **double-clicking**: no web server is required. Reading,
+The HTML opens in the browser when processing ends, and double-clicking reopens it: no web server is required. Reading,
 sorting and filtering work offline. Driving routes use **OSRM** and town search
 uses **Photon**, with no API key or billing account. Internet is used to fetch
 missing data and display the map background.
@@ -131,8 +131,8 @@ elevation recalculation, routing and asphalt measurement:
 .\gpx2dash.exe "C:\path\to\gpx" --asphalt --html dashboard.html --kml tracks.kml --language en
 ~~~
 
-Replace `C:\path\to\gpx` with the actual path to your GPX folder, then
-double-click **dashboard.html** in that GPX folder after the command finishes.
+Replace `C:\path\to\gpx` with the actual path to your GPX folder. When the
+command finishes, **dashboard.html** opens in your browser (`--no-browser` skips this).
 On Linux/macOS use `./gpx2dash`. The bundles include Python and dependencies, so no Python
 installation is required. You can now skip the source installation section
 and continue with [usage examples](#usage-examples).

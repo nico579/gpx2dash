@@ -271,10 +271,12 @@ class DashboardTests(unittest.TestCase):
                 (excluded / "sous-dossier" / "ignore.GPX").write_text("invalid cached GPX", encoding="utf-8")
             with patch.object(gpx2dash, "calculer_denivele", offline), \
                     patch.object(gpx2dash.concurrent.futures, "ProcessPoolExecutor", concurrent.futures.ThreadPoolExecutor), \
-                    patch.object(reverse_geocoder, "search", return_value=[{"name": "Test"}]):
+                    patch.object(reverse_geocoder, "search", return_value=[{"name": "Test"}]),                     patch.object(gpx2dash.webbrowser, "open") as browser:
                 gpx2dash.fusionner_gpx_vers_kml_parallele(directory, folder / "out.kml",
-                                                       dossier_cache=cache, routes_en_ligne=False)
+                                                       dossier_cache=cache, routes_en_ligne=False,
+                                                       ouvrir_html=True)
             self.assertTrue((folder / "out.kml").is_file())
+            browser.assert_called_once_with((folder / "out.html").resolve().as_uri())
             html = (folder / "out.html").read_text(encoding="utf-8")
             table = Table(html)
             start = html.index('type="application/json">') + len('type="application/json">')
@@ -285,6 +287,7 @@ class DashboardTests(unittest.TestCase):
             document = ET.parse(folder / "out.kml")
             ns = {"k": "http://www.opengis.net/kml/2.2"}
             kml_color = document.find(".//k:LineStyle/k:color", ns).text
+            self.assertIsNone(document.find(".//k:ExtendedData", ns))
             html_color = payload["traces"][0]["color"].lstrip("#")
             self.assertEqual(kml_color, "ff" + html_color[4:6] + html_color[2:4] + html_color[:2])
             self.assertEqual(len(table.rows), 2)

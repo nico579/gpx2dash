@@ -13,6 +13,7 @@ import json
 import hashlib
 import math
 import shutil
+import webbrowser
 from collections import Counter
 from pathlib import Path
 
@@ -267,7 +268,7 @@ def fusionner_gpx_vers_kml_parallele(dossier_entree, fichier_sortie, tolerance_m
                                     goudron_en_ligne=False, marge_goudron=MARGE_GOUDRON,
                                     angle_goudron=ANGLE_GOUDRON, serveur_overpass=SERVEUR_OVERPASS,
                                     langue=None, marge_commune=MARGE_COMMUNE,
-                                    longueur_commune=LONGUEUR_COMMUNE):
+                                    longueur_commune=LONGUEUR_COMMUNE, ouvrir_html=False):
     """Produit le KML et son tableau HTML, à partir des mêmes statistiques GPX."""
     dossier_entree = Path(dossier_entree).resolve()
     dossier_cache = Path(dossier_cache or dossier_entree / DOSSIER_CACHE).resolve()
@@ -390,11 +391,6 @@ def fusionner_gpx_vers_kml_parallele(dossier_entree, fichier_sortie, tolerance_m
         # Une LineString par segment GPX, regroupées dans une MultiGeometry :
         # évite le trait droit parasite entre segments (pause d'enregistrement).
         trace = kml.newmultigeometry(name=nom_complet)
-        for cle in ('distance_goudron_m',
-                    'goudron_incertain_m', 'goudron_marge_m', 'goudron_angle_deg',
-                    'nombre_traces_communes', 'traces_communes',
-                    'superposition_marge_m', 'superposition_min_m'):
-            trace.extendeddata.newdata(cle, json.dumps(res.get(cle), ensure_ascii=False))
         for segment in res['segments']:
             trace.newlinestring(coords=segment)
         trace.style.linestyle.color = couleur_stable(res['nom'])
@@ -436,6 +432,8 @@ def fusionner_gpx_vers_kml_parallele(dossier_entree, fichier_sortie, tolerance_m
                              fichier_kml=fichier_sortie if kml_enregistre else None,
                              marge_commune=marge_commune, longueur_commune=longueur_commune)
         print(f"Tableau de bord HTML : {fichier_html} ({len(resultats)} traces)")
+        if ouvrir_html:
+            webbrowser.open(Path(fichier_html).resolve().as_uri())
     except OSError as e:
         print(f"Erreur HTML : {e}")
     erreurs_routes = Counter(res['erreur_route'] for res in resultats if res.get('erreur_route'))
@@ -475,6 +473,7 @@ def main():
     parser.add_argument("--tolerance", type=float, default=10, help="KML/map simplification in metres (default: %(default)g).")
     parser.add_argument("--line-width", type=float, default=5, help="KML line width (default: %(default)g).")
     parser.add_argument("--language", choices=("en", "fr"), help="Initial dashboard language (default: browser language).")
+    parser.add_argument("--no-browser", action="store_true", help="Do not open the HTML dashboard when processing ends.")
     # Hidden aliases keep existing commands working, without duplicating the English help.
     for old, dest, kw in [
         ("--depuis-cache", "from_cache", {"action": "store_true"}),
@@ -533,6 +532,7 @@ def main():
         goudron_en_ligne=args.asphalt, marge_goudron=args.asphalt_tolerance,
         angle_goudron=args.asphalt_angle, serveur_overpass=args.overpass_server, langue=args.language,
         marge_commune=args.overlap_tolerance, longueur_commune=args.overlap_min_length,
+        ouvrir_html=not args.no_browser,
     )
 
 
